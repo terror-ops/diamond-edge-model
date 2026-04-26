@@ -1,0 +1,2221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diamond Edge — MLB Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0d12;
+  --surface: #11151b;
+  --surface-2: #161b22;
+  --surface-3: #1c2230;
+  --border: #232a36;
+  --border-strong: #2f3847;
+  --text: #f0f3f7;
+  --text-2: #9aa3b0;
+  --text-3: #6b7280;
+  --accent: #2563eb;
+  --accent-hover: #3b82f6;
+  --success: #10b981;
+  --success-bg: rgba(16, 185, 129, 0.12);
+  --success-border: rgba(16, 185, 129, 0.3);
+  --danger: #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.12);
+  --warning: #f59e0b;
+  --warning-bg: rgba(245, 158, 11, 0.12);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 16px;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ---------------- DESKTOP LAYOUT: Game tab two-column ---------------- */
+@media (min-width: 900px) {
+  body { padding: 24px 32px; }
+  
+  .game-layout {
+    display: grid;
+    grid-template-columns: minmax(360px, 480px) 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  .game-form-col { /* left side: stickier */ }
+  .game-result-col {
+    position: sticky;
+    top: 24px;
+  }
+  .game-result-col .empty-result {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 80px 20px;
+    text-align: center;
+    color: var(--text-3);
+    font-size: 14px;
+  }
+  
+  /* Board view: multi-column grid on desktop */
+  #board-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+  }
+  
+  /* Tracker log: side-by-side rows make better use of width */
+  #log-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 10px;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 899px) {
+  /* Tablet: Board view 2-column */
+  #board-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+}
+
+/* ---------------- HEADER ---------------- */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0 20px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-logo {
+  width: 38px;
+  height: 38px;
+  background: var(--accent);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+.brand-text .name {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.brand-text .sub {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-2);
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--success);
+  border-radius: 50%;
+}
+
+/* ---------------- TABS ---------------- */
+.tabs {
+  display: flex;
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 16px;
+  gap: 2px;
+}
+.tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tab:hover { color: var(--text-2); }
+.tab.active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ---------------- CARDS ---------------- */
+.card {
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+.card-sub {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ---------------- INPUTS ---------------- */
+.input-group { margin-bottom: 12px; }
+.input-group:last-child { margin-bottom: 0; }
+.label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.input, .select {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 11px 12px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.input:focus, .select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.input.auto-filled {
+  border-color: var(--success-border);
+  background: rgba(16, 185, 129, 0.04);
+}
+.input[readonly] { color: var(--text-2); cursor: default; }
+
+.input-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.input-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.input-row-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
+
+@media (max-width: 480px) {
+  .input-row-4 { grid-template-columns: 1fr 1fr; }
+}
+
+/* ---------------- BUTTONS ---------------- */
+.btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 100%;
+}
+.btn:hover { background: var(--surface-3); border-color: var(--border-strong); }
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-row { display: flex; gap: 8px; }
+.btn-row .btn { flex: 1; }
+
+/* ---------------- DIAGNOSTIC ---------------- */
+.diag {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--success);
+  line-height: 1.7;
+  margin-top: 12px;
+  display: none;
+}
+.diag.show { display: block; }
+.diag.error { color: var(--danger); }
+
+/* ---------------- STATUS LINES ---------------- */
+.status {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 8px;
+}
+.status.success { color: var(--success); }
+.status.error { color: var(--danger); }
+.status.loading { color: var(--warning); }
+
+/* ---------------- BOARD VIEW ---------------- */
+.board-game {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border: 1px solid transparent;
+}
+.board-game:hover { background: var(--surface-2); border-color: var(--border); }
+.board-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.board-teams {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.board-team {
+  font-size: 15px;
+  font-weight: 600;
+}
+.board-vs {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.board-time {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.board-pitchers {
+  font-size: 11px;
+  color: var(--text-2);
+  margin-top: 6px;
+}
+.board-odds {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.odds-pill {
+  background: var(--surface-2);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  font-family: 'JetBrains Mono', monospace;
+}
+.odds-pill .v { color: var(--text); font-weight: 500; }
+
+/* ---------------- ANALYSIS RESULT ---------------- */
+.matchup-card {
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 12px;
+}
+.matchup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.matchup-teams {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.matchup-teams .team {
+  font-size: 18px;
+  font-weight: 700;
+}
+.matchup-teams .vs {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.matchup-meta {
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: right;
+}
+
+.team-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.team-cell {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 12px;
+}
+.team-cell .label {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+.team-cell .ml {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+.team-cell .model-pct {
+  font-size: 11px;
+  color: var(--success);
+  margin-top: 2px;
+}
+.team-cell.under .ml { color: var(--text-3); }
+.team-cell.under .model-pct { color: var(--text-3); }
+
+.recommendation {
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.recommendation.positive {
+  background: var(--success);
+  color: #053527;
+}
+.recommendation.negative {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+.recommendation.fade {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
+  color: #fca5a5;
+}
+.rec-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin-bottom: 3px;
+  opacity: 0.85;
+}
+.rec-pick {
+  font-size: 16px;
+  font-weight: 700;
+}
+.rec-edge {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+.rec-edge-label {
+  font-size: 10px;
+  text-align: right;
+  opacity: 0.85;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.detail-cell {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+.detail-cell .label {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+}
+.detail-cell .v {
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.factor-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.factor-row:last-child { border-bottom: none; }
+.factor-row .label { color: var(--text-2); }
+.factor-row .v { color: var(--text); font-weight: 500; font-family: 'JetBrains Mono', monospace; }
+
+/* ---------------- TRACKER ---------------- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.stat-card {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 12px;
+}
+.stat-label {
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+.stat-sub {
+  font-size: 10px;
+  color: var(--success);
+  margin-top: 2px;
+}
+.stat-sub.bad { color: var(--danger); }
+.stat-sub.flat { color: var(--text-3); }
+
+.log-row {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.log-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.log-row .game { font-weight: 600; font-size: 13px; }
+.log-row .date { font-size: 11px; color: var(--text-3); }
+.log-row .meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.log-row .meta .v { color: var(--text); font-weight: 500; }
+.pill {
+  display: inline-block;
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.pill-w { background: var(--success-bg); color: var(--success); }
+.pill-l { background: var(--danger-bg); color: var(--danger); }
+.pill-p { background: var(--surface-3); color: var(--text-3); }
+.pill-pending { background: var(--warning-bg); color: var(--warning); }
+
+.row-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+.row-actions input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 11px;
+}
+.row-actions button {
+  padding: 6px 10px;
+  font-size: 11px;
+  width: auto;
+  background: var(--success);
+  color: #053527;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ---------------- MISC ---------------- */
+.spinner-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.footer {
+  text-align: center;
+  padding: 20px 0;
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.08em;
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="app-header">
+    <div class="brand">
+      <div class="brand-logo">⚾</div>
+      <div class="brand-text">
+        <div class="name">Diamond Edge</div>
+        <div class="sub">MLB · Diagnostic Mode</div>
+      </div>
+    </div>
+    <div class="live-pill"><span class="live-dot"></span>Live</div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" id="tab-board-btn" onclick="switchTab('board')">Board</button>
+    <button class="tab" id="tab-game-btn" onclick="switchTab('game')">Game</button>
+    <button class="tab" id="tab-tracker-btn" onclick="switchTab('tracker')" style="display:none;">Tracker</button>
+  </div>
+
+  <!-- ============== BOARD TAB ============== -->
+  <div class="tab-content active" id="tab-board">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h2 class="card-title">Today's Slate</h2>
+          <div class="card-sub" id="board-meta">Pulling games…</div>
+        </div>
+        <button class="btn" onclick="loadBoard()" style="width:auto; padding:8px 14px; font-size:12px;">Refresh</button>
+      </div>
+      <div class="input-group">
+        <label class="label">Date</label>
+        <input type="date" class="input" id="board-date" onchange="loadBoard()">
+      </div>
+      <div class="status" id="board-status"></div>
+    </div>
+
+    <div id="board-list">
+      <div class="empty">No games loaded yet.</div>
+    </div>
+  </div>
+
+  <!-- ============== GAME TAB ============== -->
+  <div class="tab-content" id="tab-game">
+
+    <!-- Hidden config inputs -->
+    <input type="hidden" id="weather_key" value="">
+    <input type="hidden" id="tracker_url" value="">
+
+    <div class="game-layout">
+    <div class="game-form-col">
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">API Diagnostic</h2>
+      </div>
+      <button class="btn" onclick="runDiagnostic()">Run Diagnostic</button>
+      <div class="diag" id="diag"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Game Setup</h2>
+      </div>
+      <div class="input-row-2">
+        <div class="input-group">
+          <label class="label">Away</label>
+          <select class="select" id="away" onchange="onTeamChange()">
+            <option value="">Select…</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label class="label">Home</label>
+          <select class="select" id="home" onchange="onTeamChange()">
+            <option value="">Select…</option>
+          </select>
+        </div>
+      </div>
+      <div class="input-group">
+        <label class="label">Game Date</label>
+        <input type="date" class="input" id="gamedate" onchange="onTeamChange()">
+      </div>
+      <div class="status" id="game-status">Pick both teams to auto-fetch.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Pitchers &amp; Odds</h2>
+      </div>
+      <div class="input-row-2">
+        <div class="input-group">
+          <label class="label">Away SP</label>
+          <input type="text" class="input" id="away_sp" placeholder="—">
+        </div>
+        <div class="input-group">
+          <label class="label">Home SP</label>
+          <input type="text" class="input" id="home_sp" placeholder="—">
+        </div>
+      </div>
+      <div class="input-row-2">
+        <div class="input-group">
+          <label class="label">Away FIP/ERA</label>
+          <input type="number" step="0.01" class="input" id="away_fip" placeholder="—">
+        </div>
+        <div class="input-group">
+          <label class="label">Home FIP/ERA</label>
+          <input type="number" step="0.01" class="input" id="home_fip" placeholder="—">
+        </div>
+      </div>
+      <div class="input-row-4">
+        <div class="input-group">
+          <label class="label">Away ML</label>
+          <input type="number" class="input" id="away_ml" placeholder="—">
+        </div>
+        <div class="input-group">
+          <label class="label">Home ML</label>
+          <input type="number" class="input" id="home_ml" placeholder="—">
+        </div>
+        <div class="input-group">
+          <label class="label">Total</label>
+          <input type="number" step="0.5" class="input" id="total" placeholder="—">
+        </div>
+        <div class="input-group">
+          <label class="label">Juice</label>
+          <input type="text" class="input" id="juice" placeholder="-110/-110">
+        </div>
+      </div>
+      <div class="status" id="odds-status"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Bullpen Fatigue</h2>
+        <div class="card-sub">Last 3 games IP</div>
+      </div>
+      <div class="input-row-2">
+        <div class="input-group">
+          <label class="label">Away BP IP</label>
+          <input type="number" step="0.1" class="input" id="away_bp_ip" placeholder="—" readonly>
+        </div>
+        <div class="input-group">
+          <label class="label">Home BP IP</label>
+          <input type="number" step="0.1" class="input" id="home_bp_ip" placeholder="—" readonly>
+        </div>
+      </div>
+      <div class="status" id="bullpen-status"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Weather (Home Park)</h2>
+      </div>
+      <div class="input-row-3">
+        <div class="input-group">
+          <label class="label">Temp °F</label>
+          <input type="number" class="input" id="temp" placeholder="—" readonly>
+        </div>
+        <div class="input-group">
+          <label class="label">Wind MPH</label>
+          <input type="number" class="input" id="wind" placeholder="—" readonly>
+        </div>
+        <div class="input-group">
+          <label class="label">Run Mod</label>
+          <input type="text" class="input" id="run_mod" placeholder="1.00" readonly>
+        </div>
+      </div>
+      <div class="status" id="weather-status"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Sharp Notes</h2>
+      </div>
+      <textarea class="input" id="notes" placeholder="Line movement, injuries…" rows="3" style="resize:vertical; min-height:60px;"></textarea>
+    </div>
+
+    <button class="btn btn-primary" onclick="runAnalysis()">Run Analysis</button>
+
+    </div><!-- /game-form-col -->
+    
+    <div class="game-result-col">
+      <div id="result-container">
+        <div class="empty-result">Run analysis to see prediction details here.</div>
+      </div>
+    </div>
+    </div><!-- /game-layout -->
+  </div><!-- /tab-game -->
+
+  <!-- ============== TRACKER TAB ============== -->
+  <div class="tab-content" id="tab-tracker">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Performance Tracker</h2>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="loadTrackerData()">Reload</button>
+        <button class="btn" onclick="checkAllPending()" style="border-color:var(--success); color:var(--success);">Check Results Now</button>
+        <button class="btn" onclick="autoUpdateYesterday()">Pull Yesterday</button>
+      </div>
+      <div class="status" id="data-status">Click Reload to fetch your prediction history.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Performance</h2>
+      </div>
+      <div class="stat-grid" id="stats">
+        <div class="stat-card"><div class="stat-label">LOGGED</div><div class="stat-value">—</div></div>
+        <div class="stat-card"><div class="stat-label">SETTLED</div><div class="stat-value">—</div></div>
+        <div class="stat-card"><div class="stat-label">ML RECORD</div><div class="stat-value">—</div></div>
+        <div class="stat-card"><div class="stat-label">ML WIN %</div><div class="stat-value">—</div></div>
+        <div class="stat-card"><div class="stat-label">TOTALS RECORD</div><div class="stat-value">—</div></div>
+        <div class="stat-card"><div class="stat-label">TOTALS WIN %</div><div class="stat-value">—</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Prediction Log</h2>
+      </div>
+      <div id="log-list">
+        <div class="empty">No data loaded.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">DIAMOND EDGE · NO DATA STORED LOCALLY</div>
+</div>
+
+<script>
+// ============================================================
+// HARDCODED CONFIG — edit these before deploying
+// ============================================================
+const HARDCODED_WEATHER_KEY = '5c18a532a8710d7ad9aaab6db9ff113b';
+const HARDCODED_TRACKER_URL = 'https://script.google.com/macros/s/AKfycbzINtK__4ges-rEU6Qqg-XP467pKRK5ljVUP6sMSQ0H1zRbB1FLtpY1A7pjM_6Sx-7d/exec';
+const ADMIN_KEY = 'apr2026';
+
+// ============================================================
+// PROXY LAYER
+// ============================================================
+const PROXIES = [
+  { name: 'corsproxy.io', wrap: u => 'https://corsproxy.io/?url=' + encodeURIComponent(u) },
+  { name: 'allorigins.win', wrap: u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
+  { name: 'codetabs', wrap: u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u) }
+];
+
+async function proxyFetch(targetUrl) {
+  let lastError = null;
+  for (const p of PROXIES) {
+    try {
+      const r = await fetch(p.wrap(targetUrl));
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      return { data, proxy: p.name };
+    } catch (e) { lastError = e; }
+  }
+  throw new Error('All proxies failed. Last: ' + (lastError ? lastError.message : 'unknown'));
+}
+
+// ============================================================
+// TEAM DATABASE
+// ============================================================
+const TEAMS = {
+  'ARI': { id: 109, espn: 'ARI', name: 'Arizona Diamondbacks', vsLHP: 0.322, vsRHP: 0.316, park: 1.02, lat: 33.4453, lon: -112.0667, roof: 'retractable' },
+  'ATL': { id: 144, espn: 'ATL', name: 'Atlanta Braves',       vsLHP: 0.335, vsRHP: 0.328, park: 1.01, lat: 33.8908, lon: -84.4678, roof: 'open' },
+  'BAL': { id: 110, espn: 'BAL', name: 'Baltimore Orioles',    vsLHP: 0.328, vsRHP: 0.319, park: 1.03, lat: 39.2839, lon: -76.6217, roof: 'open' },
+  'BOS': { id: 111, espn: 'BOS', name: 'Boston Red Sox',       vsLHP: 0.325, vsRHP: 0.316, park: 1.06, lat: 42.3467, lon: -71.0972, roof: 'open' },
+  'CHC': { id: 112, espn: 'CHC', name: 'Chicago Cubs',         vsLHP: 0.319, vsRHP: 0.322, park: 1.01, lat: 41.9484, lon: -87.6553, roof: 'open' },
+  'CWS': { id: 145, espn: 'CHW', name: 'Chicago White Sox',    vsLHP: 0.298, vsRHP: 0.293, park: 1.02, lat: 41.8300, lon: -87.6339, roof: 'open' },
+  'CIN': { id: 113, espn: 'CIN', name: 'Cincinnati Reds',      vsLHP: 0.321, vsRHP: 0.315, park: 1.05, lat: 39.0975, lon: -84.5066, roof: 'open' },
+  'CLE': { id: 114, espn: 'CLE', name: 'Cleveland Guardians',  vsLHP: 0.318, vsRHP: 0.312, park: 0.99, lat: 41.4962, lon: -81.6852, roof: 'open' },
+  'COL': { id: 115, espn: 'COL', name: 'Colorado Rockies',     vsLHP: 0.316, vsRHP: 0.307, park: 1.20, lat: 39.7559, lon: -104.9942, roof: 'open' },
+  'DET': { id: 116, espn: 'DET', name: 'Detroit Tigers',       vsLHP: 0.320, vsRHP: 0.314, park: 0.98, lat: 42.3390, lon: -83.0485, roof: 'open' },
+  'HOU': { id: 117, espn: 'HOU', name: 'Houston Astros',       vsLHP: 0.324, vsRHP: 0.317, park: 1.02, lat: 29.7572, lon: -95.3554, roof: 'retractable' },
+  'KC':  { id: 118, espn: 'KC',  name: 'Kansas City Royals',   vsLHP: 0.312, vsRHP: 0.305, park: 0.99, lat: 39.0517, lon: -94.4803, roof: 'open' },
+  'LAA': { id: 108, espn: 'LAA', name: 'Los Angeles Angels',   vsLHP: 0.316, vsRHP: 0.309, park: 0.99, lat: 33.8003, lon: -117.8827, roof: 'open' },
+  'LAD': { id: 119, espn: 'LAD', name: 'Los Angeles Dodgers',  vsLHP: 0.339, vsRHP: 0.333, park: 1.00, lat: 34.0739, lon: -118.2400, roof: 'open' },
+  'MIA': { id: 146, espn: 'MIA', name: 'Miami Marlins',        vsLHP: 0.310, vsRHP: 0.302, park: 0.94, lat: 25.7781, lon: -80.2197, roof: 'retractable' },
+  'MIL': { id: 158, espn: 'MIL', name: 'Milwaukee Brewers',    vsLHP: 0.322, vsRHP: 0.316, park: 1.01, lat: 43.0280, lon: -87.9712, roof: 'retractable' },
+  'MIN': { id: 142, espn: 'MIN', name: 'Minnesota Twins',      vsLHP: 0.318, vsRHP: 0.312, park: 0.99, lat: 44.9817, lon: -93.2776, roof: 'open' },
+  'NYM': { id: 121, espn: 'NYM', name: 'New York Mets',        vsLHP: 0.320, vsRHP: 0.315, park: 0.95, lat: 40.7571, lon: -73.8458, roof: 'open' },
+  'NYY': { id: 147, espn: 'NYY', name: 'New York Yankees',     vsLHP: 0.330, vsRHP: 0.327, park: 1.04, lat: 40.8296, lon: -73.9262, roof: 'open' },
+  'OAK': { id: 133, espn: 'ATH', name: 'Athletics',            vsLHP: 0.314, vsRHP: 0.308, park: 1.05, lat: 38.5803, lon: -121.5135, roof: 'open' },
+  'PHI': { id: 143, espn: 'PHI', name: 'Philadelphia Phillies',vsLHP: 0.327, vsRHP: 0.321, park: 1.04, lat: 39.9061, lon: -75.1665, roof: 'open' },
+  'PIT': { id: 134, espn: 'PIT', name: 'Pittsburgh Pirates',   vsLHP: 0.308, vsRHP: 0.304, park: 0.97, lat: 40.4469, lon: -80.0057, roof: 'open' },
+  'SD':  { id: 135, espn: 'SD',  name: 'San Diego Padres',     vsLHP: 0.324, vsRHP: 0.318, park: 0.94, lat: 32.7073, lon: -117.1566, roof: 'open' },
+  'SF':  { id: 137, espn: 'SF',  name: 'San Francisco Giants', vsLHP: 0.316, vsRHP: 0.310, park: 0.92, lat: 37.7786, lon: -122.3893, roof: 'open' },
+  'SEA': { id: 136, espn: 'SEA', name: 'Seattle Mariners',     vsLHP: 0.318, vsRHP: 0.312, park: 0.93, lat: 47.5914, lon: -122.3325, roof: 'retractable' },
+  'STL': { id: 138, espn: 'STL', name: 'St. Louis Cardinals',  vsLHP: 0.317, vsRHP: 0.311, park: 0.99, lat: 38.6226, lon: -90.1928, roof: 'open' },
+  'TB':  { id: 139, espn: 'TB',  name: 'Tampa Bay Rays',       vsLHP: 0.320, vsRHP: 0.314, park: 0.97, lat: 27.7682, lon: -82.6534, roof: 'dome' },
+  'TEX': { id: 140, espn: 'TEX', name: 'Texas Rangers',        vsLHP: 0.323, vsRHP: 0.317, park: 1.02, lat: 32.7472, lon: -97.0846, roof: 'retractable' },
+  'TOR': { id: 141, espn: 'TOR', name: 'Toronto Blue Jays',    vsLHP: 0.321, vsRHP: 0.315, park: 1.02, lat: 43.6414, lon: -79.3894, roof: 'retractable' },
+  'WAS': { id: 120, espn: 'WSH', name: 'Washington Nationals', vsLHP: 0.314, vsRHP: 0.308, park: 1.00, lat: 38.8730, lon: -77.0074, roof: 'open' }
+};
+const ID_TO_CODE = {};
+Object.keys(TEAMS).forEach(code => { ID_TO_CODE[TEAMS[code].id] = code; });
+
+const fetchCache = {
+  bullpenIP: {},
+  statcast: null,       // { hitters: {id: {xwoba}}, pitchers: {id: {xwoba}}, updated, ts }
+  lineups: {}           // key: gamePk+side → array of player IDs
+};
+
+// Wire hardcoded values
+document.getElementById('weather_key').value = HARDCODED_WEATHER_KEY;
+document.getElementById('tracker_url').value = HARDCODED_TRACKER_URL;
+
+// Reveal Tracker tab if admin key matches
+let IS_ADMIN = false;
+(function checkAdmin() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('key') === ADMIN_KEY) {
+    IS_ADMIN = true;
+    document.getElementById('tab-tracker-btn').style.display = 'block';
+  }
+})();
+
+// Populate team dropdowns
+const awaySel = document.getElementById('away');
+const homeSel = document.getElementById('home');
+Object.keys(TEAMS).sort().forEach(code => {
+  const t = TEAMS[code];
+  const opt = '<option value="' + code + '">' + code + ' — ' + t.name + '</option>';
+  awaySel.innerHTML += opt;
+  homeSel.innerHTML += opt;
+});
+
+// Default dates
+document.getElementById('gamedate').valueAsDate = new Date();
+document.getElementById('board-date').valueAsDate = new Date();
+
+// Tab switching
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.getElementById('tab-' + name + '-btn').classList.add('active');
+  
+  if (name === 'board' && !window._boardLoaded) {
+    loadBoard();
+    window._boardLoaded = true;
+  }
+  if (name === 'tracker' && !window._trackerLoaded) {
+    loadTrackerData();
+    window._trackerLoaded = true;
+  }
+}
+
+// Auto-load board on page open
+window.addEventListener('load', () => {
+  loadBoard();
+  window._boardLoaded = true;
+});
+
+const MLB_API = 'https://statsapi.mlb.com/api/v1';
+const ESPN_API = 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard';
+const ESPN_SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary';
+const WEATHER_API = 'https://api.openweathermap.org/data/2.5/forecast';
+
+// homePlateDir = compass bearing home plate faces (wind FROM this direction = blowing IN)
+// Derived from satellite imagery + ballpark orientation research.
+// "blowing out" when wind comes from homePlateDir + 180 (±45°)
+// "blowing in" when wind comes from homePlateDir (±45°)
+const PARK_ORIENTATION = {
+  'ARI': 320, 'ATL': 35,  'BAL': 90,  'BOS': 95,  'CHC': 95,
+  'CWS': 5,   'CIN': 340, 'CLE': 65,  'COL': 20,  'DET': 30,
+  'HOU': 25,  'KC':  5,   'LAA': 225, 'LAD': 55,  'MIA': 0,
+  'MIL': 110, 'MIN': 100, 'NYM': 55,  'NYY': 65,  'OAK': 230,
+  'PHI': 55,  'PIT': 80,  'SD':  320, 'SF':  55,  'SEA': 25,
+  'STL': 15,  'TB':  0,   'TEX': 30,  'TOR': 0,   'WAS': 65
+};
+
+function setStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status ' + (type || '');
+}
+function flash(input) { input.classList.add('auto-filled'); }
+function clearFlash() {
+  document.querySelectorAll('.input.auto-filled').forEach(el => el.classList.remove('auto-filled'));
+}
+function fmtDateESPN(d) { return d.replace(/-/g, ''); }
+
+// ============================================================
+// BOARD VIEW — lite slate (schedule + pitchers + odds for all games)
+// ============================================================
+async function loadBoard() {
+  const date = document.getElementById('board-date').value;
+  const list = document.getElementById('board-list');
+  list.innerHTML = '<div class="spinner-container">Loading slate…</div>';
+  setStatus('board-status', 'Fetching schedule from MLB…', 'loading');
+  
+  let games = [];
+  try {
+    const url = MLB_API + '/schedule?sportId=1&date=' + date + '&hydrate=probablePitcher,team,venue';
+    const result = await proxyFetch(url);
+    if (!result.data.dates || result.data.dates.length === 0) {
+      list.innerHTML = '<div class="empty">No games on ' + date + '.</div>';
+      setStatus('board-status', '', '');
+      document.getElementById('board-meta').textContent = '0 games';
+      return;
+    }
+    games = result.data.dates[0].games;
+  } catch (e) {
+    list.innerHTML = '<div class="empty">Failed to load slate.</div>';
+    setStatus('board-status', '✗ ' + e.message, 'error');
+    return;
+  }
+  
+  document.getElementById('board-meta').textContent = games.length + ' games';
+  setStatus('board-status', 'Fetching ESPN odds…', 'loading');
+  
+  // Pull ESPN scoreboard once for the whole slate
+  let espnEvents = [];
+  try {
+    const espnUrl = ESPN_API + '?dates=' + fmtDateESPN(date);
+    const espnResult = await proxyFetch(espnUrl);
+    espnEvents = espnResult.data.events || [];
+  } catch (e) {
+    // ESPN fetch failed, render without odds
+  }
+  
+  // Render all games
+  list.innerHTML = '';
+  games.forEach(g => {
+    const awayId = g.teams.away.team.id;
+    const homeId = g.teams.home.team.id;
+    const awayCode = ID_TO_CODE[awayId];
+    const homeCode = ID_TO_CODE[homeId];
+    if (!awayCode || !homeCode) return;
+    
+    const time = new Date(g.gameDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const awaySp = g.teams.away.probablePitcher ? g.teams.away.probablePitcher.fullName : 'TBD';
+    const homeSp = g.teams.home.probablePitcher ? g.teams.home.probablePitcher.fullName : 'TBD';
+    
+    // Match ESPN odds
+    let awayML = null, homeML = null, total = null;
+    const awayEspn = TEAMS[awayCode].espn;
+    const homeEspn = TEAMS[homeCode].espn;
+    for (const ev of espnEvents) {
+      const comp = ev.competitions && ev.competitions[0];
+      if (!comp) continue;
+      const competitors = comp.competitors || [];
+      const home = competitors.find(c => c.homeAway === 'home');
+      const away = competitors.find(c => c.homeAway === 'away');
+      if (!home || !away) continue;
+      if (home.team && home.team.abbreviation === homeEspn &&
+          away.team && away.team.abbreviation === awayEspn) {
+        const odds = comp.odds && comp.odds[0];
+        if (odds) {
+          const mls = extractMLFromOddsObj(odds);
+          awayML = mls.awayML;
+          homeML = mls.homeML;
+          total = extractTotal(odds);
+        }
+        break;
+      }
+    }
+    
+    const div = document.createElement('div');
+    div.className = 'board-game';
+    div.onclick = () => openGameInAnalyzer(awayCode, homeCode, date, awaySp, homeSp,
+                       g.teams.away.probablePitcher ? g.teams.away.probablePitcher.id : null,
+                       g.teams.home.probablePitcher ? g.teams.home.probablePitcher.id : null,
+                       awayML, homeML, total);
+    
+    const oddsHtml = (awayML != null || homeML != null || total != null)
+      ? '<div class="board-odds">' +
+        (awayML != null ? '<span class="odds-pill">' + awayCode + ' <span class="v">' + (awayML > 0 ? '+' : '') + awayML + '</span></span>' : '') +
+        (homeML != null ? '<span class="odds-pill">' + homeCode + ' <span class="v">' + (homeML > 0 ? '+' : '') + homeML + '</span></span>' : '') +
+        (total != null ? '<span class="odds-pill">O/U <span class="v">' + total + '</span></span>' : '') +
+        '</div>'
+      : '';
+    
+    div.innerHTML =
+      '<div class="board-row">' +
+      '<div class="board-teams">' +
+      '<div class="board-team">' + awayCode + '</div>' +
+      '<div class="board-vs">@</div>' +
+      '<div class="board-team">' + homeCode + '</div>' +
+      '</div>' +
+      '<div class="board-time">' + time + '</div>' +
+      '</div>' +
+      '<div class="board-pitchers">' + awaySp + ' vs ' + homeSp + '</div>' +
+      oddsHtml;
+    
+    list.appendChild(div);
+  });
+  
+  setStatus('board-status', '✓ Slate loaded. Tap any game to analyze.', 'success');
+}
+
+// Click a game on the board → switch to Game tab and pre-fill
+async function openGameInAnalyzer(awayCode, homeCode, date, awaySpName, homeSpName, awaySpId, homeSpId, awayML, homeML, total) {
+  // Pre-fill all the inputs
+  document.getElementById('away').value = awayCode;
+  document.getElementById('home').value = homeCode;
+  document.getElementById('gamedate').value = date;
+  document.getElementById('away_sp').value = awaySpName;
+  document.getElementById('home_sp').value = homeSpName;
+  if (awaySpId) document.getElementById('away_sp').dataset.pid = awaySpId;
+  if (homeSpId) document.getElementById('home_sp').dataset.pid = homeSpId;
+  if (awayML != null) document.getElementById('away_ml').value = awayML;
+  if (homeML != null) document.getElementById('home_ml').value = homeML;
+  if (total != null) document.getElementById('total').value = total;
+  
+  // Switch tab and trigger full auto-fetch
+  switchTab('game');
+  await onTeamChange();
+}
+
+// ============================================================
+// SMART ODDS PARSER (from v5)
+// ============================================================
+function parseAmerican(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') {
+    const cleaned = v.replace(/[^\d\-+]/g, '');
+    const n = parseInt(cleaned, 10);
+    return isNaN(n) ? null : n;
+  }
+  return null;
+}
+
+function extractMLFromOddsObj(o) {
+  if (!o) return { awayML: null, homeML: null };
+  let awayML = null, homeML = null;
+  if (o.awayTeamOdds && o.awayTeamOdds.moneyLine != null && typeof o.awayTeamOdds.moneyLine !== 'object') {
+    awayML = parseAmerican(o.awayTeamOdds.moneyLine);
+  }
+  if (o.homeTeamOdds && o.homeTeamOdds.moneyLine != null && typeof o.homeTeamOdds.moneyLine !== 'object') {
+    homeML = parseAmerican(o.homeTeamOdds.moneyLine);
+  }
+  if (awayML == null && o.awayTeamOdds && o.awayTeamOdds.current && o.awayTeamOdds.current.moneyLine) {
+    awayML = parseAmerican(o.awayTeamOdds.current.moneyLine.american || o.awayTeamOdds.current.moneyLine);
+  }
+  if (homeML == null && o.homeTeamOdds && o.homeTeamOdds.current && o.homeTeamOdds.current.moneyLine) {
+    homeML = parseAmerican(o.homeTeamOdds.current.moneyLine.american || o.homeTeamOdds.current.moneyLine);
+  }
+  if (awayML == null && o.awayTeamOdds && typeof o.awayTeamOdds.moneyLine === 'object' && o.awayTeamOdds.moneyLine) {
+    awayML = parseAmerican(o.awayTeamOdds.moneyLine.american);
+  }
+  if (homeML == null && o.homeTeamOdds && typeof o.homeTeamOdds.moneyLine === 'object' && o.homeTeamOdds.moneyLine) {
+    homeML = parseAmerican(o.homeTeamOdds.moneyLine.american);
+  }
+  if (awayML == null && o.awayMoneyLine != null) awayML = parseAmerican(o.awayMoneyLine);
+  if (homeML == null && o.homeMoneyLine != null) homeML = parseAmerican(o.homeMoneyLine);
+  return { awayML, homeML };
+}
+
+function pickBestOddsEntry(oddsArray) {
+  if (!Array.isArray(oddsArray) || oddsArray.length === 0) return null;
+  for (const o of oddsArray) {
+    const ml = extractMLFromOddsObj(o);
+    if (ml.awayML != null || ml.homeML != null) return o;
+  }
+  for (const o of oddsArray) { if (o.overUnder != null) return o; }
+  return oddsArray[0];
+}
+
+function extractTotal(o) {
+  if (!o) return null;
+  if (o.overUnder != null) {
+    const v = parseFloat(o.overUnder);
+    if (!isNaN(v)) return v;
+  }
+  if (o.total) {
+    const v = parseFloat(o.total.american || o.total);
+    if (!isNaN(v)) return v;
+  }
+  return null;
+}
+
+// ============================================================
+// DIAGNOSTIC
+// ============================================================
+async function runDiagnostic() {
+  const diag = document.getElementById('diag');
+  diag.classList.remove('error');
+  diag.classList.add('show');
+  diag.innerHTML = '> Testing…';
+  
+  const lines = [];
+  try {
+    const start = Date.now();
+    const result = await proxyFetch(MLB_API + '/sports/1');
+    lines.push('> [200] MLB via ' + result.proxy + ' (' + (Date.now() - start) + 'ms)');
+  } catch (e) { lines.push('> [FAIL] MLB: ' + e.message); }
+  
+  try {
+    const start = Date.now();
+    const result = await proxyFetch(ESPN_API);
+    const evs = (result.data.events || []).length;
+    lines.push('> [200] ESPN via ' + result.proxy + ' (' + (Date.now() - start) + 'ms) · ' + evs + ' events');
+  } catch (e) { lines.push('> [FAIL] ESPN: ' + e.message); }
+  
+  const wkey = HARDCODED_WEATHER_KEY;
+  if (wkey && wkey.indexOf('PASTE_') !== 0) {
+    try {
+      const start = Date.now();
+      const url = WEATHER_API + '?lat=40.7128&lon=-74.0060&appid=' + wkey + '&units=imperial&cnt=4';
+      const result = await proxyFetch(url);
+      if (result.data.list && result.data.list.length > 0) {
+        lines.push('> [200] OpenWeather forecast via ' + result.proxy + ' (' + (Date.now() - start) + 'ms)');
+      } else {
+        lines.push('> [FAIL] OpenWeather: ' + (result.data.message || 'invalid key'));
+      }
+    } catch (e) { lines.push('> [FAIL] OpenWeather: ' + e.message); }
+  } else {
+    lines.push('> [SKIP] Weather (no API key set)');
+  }
+  
+  lines.push('> ✓ Done.');
+  diag.innerHTML = lines.join('<br>');
+}
+
+// ============================================================
+// AUTO-FETCH on team change
+// ============================================================
+async function onTeamChange() {
+  const awayCode = document.getElementById('away').value;
+  const homeCode = document.getElementById('home').value;
+  const date = document.getElementById('gamedate').value;
+  
+  if (!awayCode || !homeCode) {
+    setStatus('game-status', 'Pick both teams.', '');
+    return;
+  }
+  if (awayCode === homeCode) {
+    setStatus('game-status', 'Away and home must differ.', 'error');
+    return;
+  }
+  
+  clearFlash();
+  setStatus('game-status', 'Fetching schedule…', 'loading');
+  
+  let game = null;
+  try {
+    const url = MLB_API + '/schedule?sportId=1&date=' + date + '&hydrate=probablePitcher,team';
+    const result = await proxyFetch(url);
+    if (!result.data.dates || result.data.dates.length === 0) {
+      setStatus('game-status', 'No games on ' + date + '.', 'error');
+      return;
+    }
+    game = result.data.dates[0].games.find(g =>
+      ID_TO_CODE[g.teams.away.team.id] === awayCode &&
+      ID_TO_CODE[g.teams.home.team.id] === homeCode
+    );
+    if (!game) {
+      setStatus('game-status', 'No ' + awayCode + ' @ ' + homeCode + ' on this date.', 'error');
+      return;
+    }
+  } catch (e) {
+    setStatus('game-status', '✗ ' + e.message, 'error');
+    return;
+  }
+  
+  const awaySpEl = document.getElementById('away_sp');
+  const homeSpEl = document.getElementById('home_sp');
+  const awaySp = game.teams.away.probablePitcher;
+  const homeSp = game.teams.home.probablePitcher;
+  
+  // Opener detection: known short-stint openers from public data
+  // If probable pitcher is one of these, flag as opener game
+  const KNOWN_OPENERS = new Set([
+    'TBD', 'Opener', 'Bullpen Game'
+  ]);
+  
+  const awayIsOpener = !awaySp || KNOWN_OPENERS.has(awaySp.fullName);
+  const homeIsOpener = !homeSp || KNOWN_OPENERS.has(homeSp.fullName);
+  
+  if (awaySp) {
+    awaySpEl.value = awaySp.fullName + (awayIsOpener ? ' (opener)' : '');
+    awaySpEl.dataset.pid = awaySp.id;
+    flash(awaySpEl);
+  } else {
+    awaySpEl.value = 'TBD — Bullpen Game';
+    awaySpEl.dataset.pid = '';
+    awaySpEl.dataset.opener = 'true';
+    flash(awaySpEl);
+  }
+  if (homeSp) {
+    homeSpEl.value = homeSp.fullName + (homeIsOpener ? ' (opener)' : '');
+    homeSpEl.dataset.pid = homeSp.id;
+    flash(homeSpEl);
+  } else {
+    homeSpEl.value = 'TBD — Bullpen Game';
+    homeSpEl.dataset.pid = '';
+    homeSpEl.dataset.opener = 'true';
+    flash(homeSpEl);
+  }
+  
+  setStatus('game-status', 'Fetching FIPs, bullpen, odds, weather, Statcast…', 'loading');
+  
+  const season = new Date(date).getFullYear();
+  
+  // Fetch Statcast first (needed for FIP blending and lineup xwOBA)
+  const statcast = await getStatcastData();
+  
+  const tasks = [];
+  const gamePk = game.gamePk;
+  
+  // For TBD/opener games, use team bullpen ERA as SP FIP proxy
+  if (awaySp && awaySp.id) {
+    tasks.push(fetchSpFip(awaySp.id, season, awayIsOpener, awayCode, statcast)
+      .then(f => ({ kind: 'fip', side: 'away', fip: f.fip, isOpener: f.isOpener, hasStatcast: f.hasStatcast })));
+  } else {
+    tasks.push(fetchBullpenEraAsFip(awayCode, season)
+      .then(f => ({ kind: 'fip', side: 'away', fip: f, isOpener: true, hasStatcast: false })));
+  }
+  if (homeSp && homeSp.id) {
+    tasks.push(fetchSpFip(homeSp.id, season, homeIsOpener, homeCode, statcast)
+      .then(f => ({ kind: 'fip', side: 'home', fip: f.fip, isOpener: f.isOpener, hasStatcast: f.hasStatcast })));
+  } else {
+    tasks.push(fetchBullpenEraAsFip(homeCode, season)
+      .then(f => ({ kind: 'fip', side: 'home', fip: f, isOpener: true, hasStatcast: false })));
+  }
+  
+  // Lineup confirmation (runs in parallel with other fetches)
+  tasks.push(fetchConfirmedLineup(gamePk, awayCode, statcast)
+    .then(r => ({ kind: 'lineup', side: 'away', result: r })));
+  tasks.push(fetchConfirmedLineup(gamePk, homeCode, statcast)
+    .then(r => ({ kind: 'lineup', side: 'home', result: r })));
+  
+  tasks.push(fetchBullpenIP(awayCode, date).then(ip => ({ kind: 'bp', side: 'away', ip })));
+  tasks.push(fetchBullpenIP(homeCode, date).then(ip => ({ kind: 'bp', side: 'home', ip })));
+  tasks.push(fetchEspnOdds(awayCode, homeCode, date));
+  tasks.push(fetchWeather(homeCode));
+  
+  const results = await Promise.allSettled(tasks);
+  
+  // Track lineup xwOBA so runAnalysis can use it
+  const lineupXwoba = { away: null, home: null };
+  
+  results.forEach(r => {
+    if (r.status !== 'fulfilled' || !r.value) return;
+    const v = r.value;
+    if (v.kind === 'fip') {
+      const el = document.getElementById(v.side + '_fip');
+      el.value = v.fip.toFixed(2);
+      el.dataset.opener = v.isOpener ? 'true' : 'false';
+      el.dataset.statcast = v.hasStatcast ? 'true' : 'false';
+      flash(el);
+    } else if (v.kind === 'bp') {
+      const el = document.getElementById(v.side + '_bp_ip');
+      el.value = v.ip.toFixed(1);
+      flash(el);
+    } else if (v.kind === 'lineup') {
+      if (v.result && v.result.confirmed) {
+        lineupXwoba[v.side] = v.result.xwoba;
+        const side = v.side === 'away' ? 'Away' : 'Home';
+        const msg = v.result.xwoba
+          ? '✓ ' + side + ' lineup confirmed · xwOBA ' + v.result.xwoba.toFixed(3) + ' (' + v.result.coverage + ')'
+          : '✓ ' + side + ' lineup confirmed · no Statcast data yet';
+        setStatus('game-status', msg, 'success');
+      }
+    }
+  });
+  
+  // Store lineup xwOBAs for runAnalysis
+  window._lineupXwoba = lineupXwoba;
+  // Store Statcast ref for pitcher xwOBA display
+  window._statcast = statcast;
+  
+  const statcastMsg = statcast && statcast.hitters && Object.keys(statcast.hitters).length > 0
+    ? ' · Statcast: ' + Object.keys(statcast.hitters).length + ' hitters'
+    : ' · Statcast: not loaded';
+  
+  setStatus('game-status', '✓ All data loaded' + statcastMsg + '. Ready to run analysis.', 'success');
+}
+
+async function fetchSpFip(pid, season, isOpener, teamCode, statcast) {
+  try {
+    const url = MLB_API + '/people/' + pid + '/stats?stats=season&group=pitching&season=' + season;
+    const result = await proxyFetch(url);
+    const d = result.data;
+    if (d.stats && d.stats[0] && d.stats[0].splits[0]) {
+      const s = d.stats[0].splits[0].stat;
+      const ip = parseFloat(s.inningsPitched) || 0;
+      
+      const starts = s.gamesStarted || 1;
+      const ipPerStart = ip / Math.max(1, starts);
+      const detectedOpener = isOpener || ipPerStart < 3;
+      
+      let fip = 4.20;
+      if (ip >= 5) {
+        const hr = s.homeRuns || 0;
+        const bb = s.baseOnBalls || 0;
+        const k = s.strikeOuts || 0;
+        fip = (13 * hr + 3 * bb - 2 * k) / ip + 3.10;
+      } else {
+        fip = parseFloat(s.era) || 4.20;
+      }
+      
+      // Blend with Statcast xwOBA-against if available
+      const blended = blendFipWithXwoba(fip, pid, statcast);
+      fip = blended.fip;
+      
+      if (detectedOpener) {
+        const bpEra = await fetchBullpenEraAsFip(teamCode, season);
+        fip = fip * 0.4 + bpEra * 0.6;
+        return { fip, isOpener: true, hasStatcast: blended.hasStatcast };
+      }
+      return { fip, isOpener: false, hasStatcast: blended.hasStatcast };
+    }
+  } catch (e) { /* ignore */ }
+  return { fip: 4.20, isOpener: false, hasStatcast: false };
+}
+
+// Fetch team season pitching ERA as a proxy for bullpen quality in opener games
+async function fetchBullpenEraAsFip(teamCode, season) {
+  try {
+    const teamId = TEAMS[teamCode].id;
+    const url = MLB_API + '/teams/' + teamId + '/stats?season=' + season + '&group=pitching&stats=season';
+    const result = await proxyFetch(url);
+    const d = result.data;
+    if (d.stats && d.stats[0] && d.stats[0].splits[0]) {
+      const era = parseFloat(d.stats[0].splits[0].stat.era) || 4.50;
+      return era * 1.02;
+    }
+  } catch (e) { /* ignore */ }
+  return 4.50;
+}
+
+// ============================================================
+// STATCAST DATA — fetch from Apps Script (which pulls from Savant daily)
+// ============================================================
+async function getStatcastData() {
+  // Return cached data if fresher than 4 hours
+  if (fetchCache.statcast && (Date.now() - fetchCache.statcast.ts) < 4 * 60 * 60 * 1000) {
+    return fetchCache.statcast;
+  }
+  
+  const url = HARDCODED_TRACKER_URL;
+  if (!url || url.indexOf('PASTE_') === 0) return null;
+  
+  try {
+    const r = await fetch(url + '?action=getStatcastData');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (!data.success) return null;
+    
+    fetchCache.statcast = {
+      hitters: data.hitters || {},
+      pitchers: data.pitchers || {},
+      updated: data.updated,
+      ts: Date.now()
+    };
+    return fetchCache.statcast;
+  } catch (e) {
+    console.warn('Statcast fetch failed:', e);
+    return null;
+  }
+}
+
+/**
+ * Enhance SP FIP with Statcast xwOBA-against data.
+ * pitcher xwOBA-against (from the pitching leaderboard) is the best
+ * single predictor of future ERA. We blend it with FIP:
+ * finalFip = fip * 0.5 + xwobaEquivalentEra * 0.5
+ *
+ * xwOBA → approximate ERA equivalent:
+ * ERA ≈ (xwOBA - 0.250) * 40 + 2.50   (rough linear fit)
+ */
+function blendFipWithXwoba(fip, pitcherId, statcast) {
+  if (!statcast || !statcast.pitchers) return { fip, hasStatcast: false };
+  const p = statcast.pitchers[pitcherId];
+  if (!p || p.pa < 50) return { fip, hasStatcast: false }; // too few PA to trust
+  
+  const xwobaEra = (p.xwoba - 0.250) * 40 + 2.50;
+  const blended = fip * 0.5 + xwobaEra * 0.5;
+  return { fip: Math.max(1.5, Math.min(8.0, blended)), hasStatcast: true, xwoba: p.xwoba };
+}
+
+// ============================================================
+// LINEUP CONFIRMATION — fetch confirmed batting order from MLB API
+// ============================================================
+async function fetchConfirmedLineup(gamePk, teamCode, statcast) {
+  const cacheKey = gamePk + '_' + teamCode;
+  
+  try {
+    const url = MLB_API + '/game/' + gamePk + '/boxscore';
+    const result = await proxyFetch(url);
+    const d = result.data;
+    
+    // Determine which side this team is on
+    let teamSide = null;
+    if (d.teams && d.teams.away && d.teams.away.team) {
+      const awayId = d.teams.away.team.id;
+      if (ID_TO_CODE[awayId] === teamCode) teamSide = 'away';
+    }
+    if (!teamSide && d.teams && d.teams.home && d.teams.home.team) {
+      const homeId = d.teams.home.team.id;
+      if (ID_TO_CODE[homeId] === teamCode) teamSide = 'home';
+    }
+    if (!teamSide) return null;
+    
+    const teamData = d.teams[teamSide];
+    const battingOrder = teamData.battingOrder || [];
+    if (battingOrder.length === 0) return null; // Lineup not posted yet
+    
+    // Compute lineup xwOBA from Statcast if available
+    if (statcast && statcast.hitters && Object.keys(statcast.hitters).length > 0) {
+      const xwobas = [];
+      const top4xwobas = []; // top of order matters more
+      
+      battingOrder.slice(0, 9).forEach((playerId, idx) => {
+        const h = statcast.hitters[playerId];
+        if (h && h.pa >= 30) {
+          xwobas.push(h.xwoba);
+          if (idx < 4) top4xwobas.push(h.xwoba); // spots 1-4
+        }
+      });
+      
+      if (xwobas.length >= 6) {
+        // Weight: average of all 9, with top 4 slightly upweighted
+        const avgAll = xwobas.reduce((a, b) => a + b, 0) / xwobas.length;
+        const avgTop4 = top4xwobas.length > 0
+          ? top4xwobas.reduce((a, b) => a + b, 0) / top4xwobas.length
+          : avgAll;
+        const lineupXwoba = avgAll * 0.7 + avgTop4 * 0.3;
+        
+        return {
+          confirmed: true,
+          xwoba: lineupXwoba,
+          coverage: xwobas.length + '/9 hitters in Statcast',
+          playerIds: battingOrder
+        };
+      }
+    }
+    
+    // Lineup confirmed but no Statcast data — return "confirmed, no xwOBA"
+    return { confirmed: true, xwoba: null, coverage: '0/9 in Statcast', playerIds: battingOrder };
+    
+  } catch (e) {
+    return null; // boxscore not available yet
+  }
+}
+
+async function fetchBullpenIP(teamCode, date) {
+  const cacheKey = teamCode + '_' + date;
+  if (fetchCache.bullpenIP[cacheKey] != null) return fetchCache.bullpenIP[cacheKey];
+  
+  const teamId = TEAMS[teamCode].id;
+  const today = new Date(date);
+  const startDate = new Date(today.getTime() - 5 * 24 * 60 * 60 * 1000);
+  const endDate = new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000);
+  const fmt = d => d.toISOString().split('T')[0];
+  
+  setStatus('bullpen-status', 'Fetching ' + teamCode + '…', 'loading');
+  
+  let totalReliefIP = 0;
+  let gamesScanned = 0;
+  
+  try {
+    const schedUrl = MLB_API + '/schedule?sportId=1&teamId=' + teamId +
+                     '&startDate=' + fmt(startDate) + '&endDate=' + fmt(endDate);
+    const schedResult = await proxyFetch(schedUrl);
+    const dates = schedResult.data.dates || [];
+    const gamePks = [];
+    dates.forEach(d => {
+      d.games.forEach(g => {
+        if (g.status && g.status.statusCode === 'F') gamePks.push(g.gamePk);
+      });
+    });
+    const last3 = gamePks.slice(-3);
+    const bsPromises = last3.map(pk => fetchBoxscoreReliefIP(pk, teamId));
+    const reliefResults = await Promise.allSettled(bsPromises);
+    reliefResults.forEach(r => {
+      if (r.status === 'fulfilled' && typeof r.value === 'number' && !isNaN(r.value)) {
+        totalReliefIP += r.value;
+        gamesScanned++;
+      }
+    });
+    if (gamesScanned > 0) {
+      setStatus('bullpen-status', '✓ ' + teamCode + ' BP scanned ' + gamesScanned + ' games', 'success');
+    } else {
+      totalReliefIP = 9.0;
+    }
+  } catch (e) {
+    totalReliefIP = 9.0;
+  }
+  
+  fetchCache.bullpenIP[cacheKey] = totalReliefIP;
+  return totalReliefIP;
+}
+
+async function fetchBoxscoreReliefIP(gamePk, teamId) {
+  try {
+    const url = MLB_API + '/game/' + gamePk + '/boxscore';
+    const result = await proxyFetch(url);
+    const d = result.data;
+    let teamSide = null;
+    if (d.teams && d.teams.away && d.teams.away.team && d.teams.away.team.id === teamId) teamSide = 'away';
+    else if (d.teams && d.teams.home && d.teams.home.team && d.teams.home.team.id === teamId) teamSide = 'home';
+    if (!teamSide) return 0;
+    const teamData = d.teams[teamSide];
+    const totalIP = parseFloat(teamData.teamStats && teamData.teamStats.pitching && teamData.teamStats.pitching.inningsPitched) || 0;
+    let starterIP = 0;
+    const pitcherIds = teamData.pitchers || [];
+    if (pitcherIds.length > 0) {
+      const starterId = pitcherIds[0];
+      const starterPlayer = teamData.players && teamData.players['ID' + starterId];
+      if (starterPlayer && starterPlayer.stats && starterPlayer.stats.pitching) {
+        starterIP = parseFloat(starterPlayer.stats.pitching.inningsPitched) || 0;
+      }
+    }
+    return Math.max(0, totalIP - starterIP);
+  } catch (e) { return 0; }
+}
+
+async function fetchEspnOdds(awayCode, homeCode, date) {
+  setStatus('odds-status', 'Querying ESPN…', 'loading');
+  const awayEspn = TEAMS[awayCode].espn;
+  const homeEspn = TEAMS[homeCode].espn;
+  let scoreboardCompetition = null;
+  let eventId = null;
+  
+  try {
+    const url = ESPN_API + '?dates=' + fmtDateESPN(date);
+    const result = await proxyFetch(url);
+    const events = result.data.events || [];
+    for (const ev of events) {
+      const comp = ev.competitions && ev.competitions[0];
+      if (!comp) continue;
+      const competitors = comp.competitors || [];
+      const home = competitors.find(c => c.homeAway === 'home');
+      const away = competitors.find(c => c.homeAway === 'away');
+      if (!home || !away) continue;
+      if (home.team && home.team.abbreviation === homeEspn &&
+          away.team && away.team.abbreviation === awayEspn) {
+        scoreboardCompetition = comp;
+        eventId = ev.id;
+        break;
+      }
+    }
+  } catch (e) {
+    setStatus('odds-status', '✗ ' + e.message, 'error');
+    return;
+  }
+  
+  if (!scoreboardCompetition) {
+    setStatus('odds-status', 'No ESPN match for ' + awayEspn + ' @ ' + homeEspn, 'error');
+    return;
+  }
+  
+  let awayML = null, homeML = null, total = null;
+  let bookUsed = 'consensus';
+  
+  const oddsArray = scoreboardCompetition.odds || [];
+  if (oddsArray.length > 0) {
+    const best = pickBestOddsEntry(oddsArray);
+    if (best) {
+      const mls = extractMLFromOddsObj(best);
+      awayML = mls.awayML;
+      homeML = mls.homeML;
+      total = extractTotal(best);
+      bookUsed = (best.provider && best.provider.name) || 'consensus';
+    }
+  }
+  
+  if ((awayML == null || homeML == null) && eventId) {
+    try {
+      const summaryUrl = ESPN_SUMMARY + '?event=' + eventId;
+      const sumResult = await proxyFetch(summaryUrl);
+      const sumData = sumResult.data;
+      const pc = sumData.pickcenter || [];
+      if (pc.length > 0) {
+        const best = pickBestOddsEntry(pc);
+        if (best) {
+          const mls = extractMLFromOddsObj(best);
+          if (awayML == null) awayML = mls.awayML;
+          if (homeML == null) homeML = mls.homeML;
+          if (total == null) total = extractTotal(best);
+          if (best.provider && best.provider.name) bookUsed = best.provider.name;
+        }
+      }
+    } catch (e) { /* keep partial */ }
+  }
+  
+  if (awayML != null) { const el = document.getElementById('away_ml'); el.value = awayML; flash(el); }
+  if (homeML != null) { const el = document.getElementById('home_ml'); el.value = homeML; flash(el); }
+  if (total != null) { const el = document.getElementById('total'); el.value = total; flash(el); }
+  
+  const parts = [];
+  if (awayML != null && homeML != null) parts.push('ML ✓');
+  else parts.push('ML missing');
+  if (total != null) parts.push('Total ✓');
+  else parts.push('Total missing');
+  
+  if (awayML != null || homeML != null || total != null) {
+    setStatus('odds-status', '✓ ESPN (' + bookUsed + ') · ' + parts.join(' · '), 'success');
+  } else {
+    setStatus('odds-status', 'No odds available. Enter manually.', 'error');
+  }
+}
+
+async function fetchWeather(homeCode) {
+  const team = TEAMS[homeCode];
+  const wkey = HARDCODED_WEATHER_KEY;
+  
+  if (team.roof === 'dome') {
+    const e1 = document.getElementById('temp'); e1.value = 72; flash(e1);
+    const e2 = document.getElementById('wind'); e2.value = 0; flash(e2);
+    const e3 = document.getElementById('run_mod'); e3.value = '1.000'; flash(e3);
+    setStatus('weather-status', '✓ Dome — neutralized', 'success');
+    return;
+  }
+  
+  if (!wkey || wkey.indexOf('PASTE_') === 0) {
+    setStatus('weather-status', 'No API key — neutral (1.00)', '');
+    document.getElementById('run_mod').value = '1.000';
+    return;
+  }
+  
+  setStatus('weather-status', 'Fetching game-time forecast…', 'loading');
+  
+  try {
+    // Forecast endpoint returns 3-hour slots over 5 days
+    const url = WEATHER_API + '?lat=' + team.lat + '&lon=' + team.lon +
+                '&appid=' + wkey + '&units=imperial&cnt=16';
+    const result = await proxyFetch(url);
+    const d = result.data;
+    
+    if (d.cod && String(d.cod) !== '200') {
+      setStatus('weather-status', '✗ ' + (d.message || 'invalid key'), 'error');
+      return;
+    }
+    
+    // Parse game date + time to find the closest forecast slot
+    const gameDate = document.getElementById('gamedate').value;
+    const gameTarget = getGameTimeUTC_(gameDate);
+    const slot = findClosestForecastSlot_(d.list, gameTarget);
+    
+    const temp     = slot.main ? slot.main.temp : 72;
+    const humidity = slot.main ? slot.main.humidity : 60;
+    const windMph  = slot.wind ? (slot.wind.speed || 0) : 0;
+    const windDeg  = slot.wind ? (slot.wind.deg || 0) : 0;
+    const precip   = (slot.rain && slot.rain['3h']) ? Math.min(100, slot.rain['3h'] * 25) : 0;
+    const pop      = (slot.pop || 0) * 100; // probability of precipitation 0-100
+    
+    // Wind direction effect relative to park orientation
+    const windEffect = computeWindEffect_(homeCode, windDeg, windMph);
+    
+    let mod = 1.0;
+    if (team.roof === 'retractable' && (pop > 40 || temp < 50)) {
+      mod = 1.0; // roof likely closed
+      setStatus('weather-status', '✓ Retractable roof — likely closed · neutral', 'success');
+    } else {
+      // Temperature (each 10°F above 70 = +1% runs)
+      mod *= 1 + (temp - 70) * 0.001;
+      // Humidity drag above 70%
+      mod *= 1 - Math.max(0, humidity - 70) * 0.0005;
+      // Wind effect (out = +runs, in = -runs, cross = small boost)
+      mod *= windEffect.modifier;
+      // Rain probability
+      if (pop > 60) mod *= 0.95;
+    }
+    mod = Math.max(0.90, Math.min(1.10, mod));
+    
+    const e1 = document.getElementById('temp'); e1.value = Math.round(temp); flash(e1);
+    const e2 = document.getElementById('wind'); e2.value = Math.round(windMph); flash(e2);
+    const e3 = document.getElementById('run_mod'); e3.value = mod.toFixed(3); flash(e3);
+    
+    const slotTime = new Date(slot.dt * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    setStatus('weather-status',
+      '✓ Forecast @ ' + slotTime + ' · ' + Math.round(temp) + '°F · ' +
+      Math.round(windMph) + ' mph ' + windEffect.label + ' · mod ' + mod.toFixed(3),
+      'success');
+  } catch (e) {
+    setStatus('weather-status', '✗ ' + e.message, 'error');
+  }
+}
+
+/**
+ * Estimate game-time UTC from a date string.
+ * MLB games average ~7 PM local time. We use 23:00 UTC as a rough universal
+ * proxy (7 PM ET = 23:00 UTC). Good enough for forecast slot matching.
+ */
+function getGameTimeUTC_(dateStr) {
+  const d = new Date(dateStr + 'T23:00:00Z');
+  return d.getTime() / 1000; // Unix timestamp
+}
+
+/**
+ * Find the forecast 3-hour slot closest to the target unix timestamp.
+ */
+function findClosestForecastSlot_(slots, targetTs) {
+  if (!slots || slots.length === 0) return {};
+  return slots.reduce((best, slot) => {
+    const diff = Math.abs(slot.dt - targetTs);
+    const bestDiff = Math.abs(best.dt - targetTs);
+    return diff < bestDiff ? slot : best;
+  });
+}
+
+/**
+ * Compute wind effect on run scoring based on park orientation.
+ * homePlateDir = bearing that home plate faces (the direction a ball hit
+ * straight to center field travels). Wind FROM that direction = blowing IN.
+ * Wind FROM opposite = blowing OUT.
+ *
+ * Returns { modifier, label }
+ * modifier: 1.0 = neutral, >1 = more runs, <1 = fewer runs
+ */
+function computeWindEffect_(teamCode, windDeg, windMph) {
+  const homePlateDir = PARK_ORIENTATION[teamCode];
+  if (homePlateDir == null || windMph < 6) {
+    return { modifier: 1.0, label: 'calm' };
+  }
+  
+  // Angle between wind direction and "blowing in" direction
+  // Wind FROM homePlateDir = blowing IN (reduces scoring)
+  // Wind FROM homePlateDir+180 = blowing OUT (increases scoring)
+  const windFrom = windDeg; // OpenWeatherMap gives direction wind is FROM
+  const diff = Math.abs(((windFrom - homePlateDir) + 360) % 360);
+  // diff: 0° = blowing in, 180° = blowing out, 90°/270° = crosswind
+  
+  const normalizedDiff = diff > 180 ? 360 - diff : diff;
+  // normalizedDiff: 0 = blowing in, 180 = blowing out
+  
+  // Convert to a -1 to +1 scale: +1 = full out, -1 = full in
+  const outFactor = (normalizedDiff - 90) / 90; // -1 to +1
+  
+  // Wind effect scales with speed. Cap at 20 mph (above that = factor stays constant)
+  const speedFactor = Math.min(windMph, 20) / 20;
+  
+  // Max impact: ±6% on run scoring (empirically derived from Wrigley wind studies)
+  const modifier = 1.0 + outFactor * speedFactor * 0.06;
+  
+  let label = '';
+  if (outFactor > 0.5) label = Math.round(windMph) + ' mph out';
+  else if (outFactor < -0.5) label = Math.round(windMph) + ' mph in';
+  else label = Math.round(windMph) + ' mph cross';
+  
+  return { modifier: Math.max(0.94, Math.min(1.06, modifier)), label };
+}
+
+// ============================================================
+// MODEL + ANALYSIS DISPLAY (rebuilt for new card design)
+// ============================================================
+function americanToProb(odds) {
+  if (odds < 0) return -odds / (-odds + 100);
+  return 100 / (odds + 100);
+}
+function probToAmerican(p) {
+  if (p >= 0.5) return Math.round(-100 * p / (1 - p));
+  return '+' + Math.round(100 * (1 - p) / p);
+}
+function bullpenFatigueFactor(ipUsed) {
+  const fatigue = Math.min(1.0, Math.max(0, (ipUsed - 6) / 6));
+  return 1 + fatigue * 0.08;
+}
+
+function runAnalysis() {
+  const awayCode = document.getElementById('away').value;
+  const homeCode = document.getElementById('home').value;
+  const container = document.getElementById('result-container');
+  
+  if (!awayCode || !homeCode) {
+    container.innerHTML = '<div class="card" style="color:var(--danger);">⚠ Select both teams first.</div>';
+    return;
+  }
+  
+  const away = TEAMS[awayCode];
+  const home = TEAMS[homeCode];
+  const awayFip = parseFloat(document.getElementById('away_fip').value) || 4.20;
+  const homeFip = parseFloat(document.getElementById('home_fip').value) || 4.20;
+  const awayIsOpener = document.getElementById('away_fip').dataset.opener === 'true';
+  const homeIsOpener = document.getElementById('home_fip').dataset.opener === 'true';
+  const awayHasStatcast = document.getElementById('away_fip').dataset.statcast === 'true';
+  const homeHasStatcast = document.getElementById('home_fip').dataset.statcast === 'true';
+  const awayML = parseInt(document.getElementById('away_ml').value) || -110;
+  const homeML = parseInt(document.getElementById('home_ml').value) || -110;
+  const totalLine = parseFloat(document.getElementById('total').value) || 8.5;
+  const awayBpIp = parseFloat(document.getElementById('away_bp_ip').value) || 9.0;
+  const homeBpIp = parseFloat(document.getElementById('home_bp_ip').value) || 9.0;
+  const runMod = parseFloat(document.getElementById('run_mod').value) || 1.0;
+  
+  // Use confirmed lineup xwOBA if available, otherwise fall back to team-level splits
+  const lineupXwoba = window._lineupXwoba || { away: null, home: null };
+  const LEAGUE_AVG_XWOBA = 0.315;
+  const LEAGUE_AVG = 4.40, HFA = 0.03, PYTHAG = 1.83;
+  
+  // Away offense: use confirmed lineup xwOBA if available, else team vs-handedness split
+  let awayWoba, awayLineupSource;
+  if (lineupXwoba.away != null) {
+    awayWoba = lineupXwoba.away;
+    awayLineupSource = 'confirmed lineup xwOBA';
+  } else {
+    awayWoba = away.vsRHP; // fallback to team-level (handedness not split here — improvement in P2)
+    awayLineupSource = 'team-level estimate';
+  }
+  
+  let homeWoba, homeLineupSource;
+  if (lineupXwoba.home != null) {
+    homeWoba = lineupXwoba.home;
+    homeLineupSource = 'confirmed lineup xwOBA';
+  } else {
+    homeWoba = home.vsRHP;
+    homeLineupSource = 'team-level estimate';
+  }
+  
+  const awayOff = 1 + (awayWoba - LEAGUE_AVG_XWOBA) * 5;
+  const homeOff = 1 + (homeWoba - LEAGUE_AVG_XWOBA) * 5;
+  const awayOppPit = Math.max(0.65, Math.min(1.40, homeFip / 4.20));
+  const homeOppPit = Math.max(0.65, Math.min(1.40, awayFip / 4.20));
+  const parkF = home.park;
+  const awayBpFactor = bullpenFatigueFactor(homeBpIp);
+  const homeBpFactor = bullpenFatigueFactor(awayBpIp);
+  
+  let awayRuns = LEAGUE_AVG * awayOff * awayOppPit * awayBpFactor * parkF * runMod;
+  let homeRuns = LEAGUE_AVG * homeOff * homeOppPit * homeBpFactor * parkF * runMod;
+  awayRuns = Math.max(2.0, Math.min(9.5, awayRuns));
+  homeRuns = Math.max(2.0, Math.min(9.5, homeRuns));
+  
+  let homeProb = Math.pow(homeRuns, PYTHAG) / (Math.pow(homeRuns, PYTHAG) + Math.pow(awayRuns, PYTHAG));
+  homeProb = Math.min(0.95, Math.max(0.05, homeProb + HFA));
+  const awayProb = 1 - homeProb;
+  const total = awayRuns + homeRuns;
+  
+  const mktAwayProb = americanToProb(awayML);
+  const mktHomeProb = americanToProb(homeML);
+  const vig = mktAwayProb + mktHomeProb;
+  const mktAwayFair = mktAwayProb / vig;
+  const mktHomeFair = mktHomeProb / vig;
+  
+  const awayEdge = awayProb - mktAwayFair;
+  const homeEdge = homeProb - mktHomeFair;
+  const totalEdge = total - totalLine;
+  
+  const winner = homeProb > awayProb ? homeCode : awayCode;
+  const winProb = Math.max(homeProb, awayProb);
+  const winEdge = homeProb > awayProb ? homeEdge : awayEdge;
+  const winML = homeProb > awayProb ? homeML : awayML;
+  
+  // Determine recommendation tier
+  let recClass = 'negative';
+  let recLabel = 'NO BET';
+  let recPick = 'Pass — edge too small';
+  if (winEdge >= 0.04) {
+    recClass = 'positive';
+    recLabel = 'RECOMMENDED PLAY';
+    recPick = winner + ' ML ' + (winML > 0 ? '+' : '') + winML;
+  } else if (winEdge <= -0.04) {
+    recClass = 'fade';
+    recLabel = 'FADE SIGNAL';
+    recPick = 'Model disagrees with sharp market';
+  }
+  
+  let totalRec = '—';
+  if (totalEdge >= 0.5) totalRec = 'OVER ' + totalLine;
+  else if (totalEdge <= -0.5) totalRec = 'UNDER ' + totalLine;
+  
+  // Render
+  const awayWinPct = (awayProb * 100).toFixed(1);
+  const homeWinPct = (homeProb * 100).toFixed(1);
+  const awayActive = awayProb > homeProb;
+  
+  container.innerHTML =
+    '<div class="matchup-card">' +
+      '<div class="matchup-header">' +
+        '<div class="matchup-teams">' +
+          '<div class="team">' + awayCode + '</div>' +
+          '<div class="vs">@</div>' +
+          '<div class="team">' + homeCode + '</div>' +
+        '</div>' +
+        '<div class="matchup-meta">' + away.name.split(' ').pop() + ' vs ' + home.name.split(' ').pop() + '</div>' +
+      '</div>' +
+      '<div class="team-grid">' +
+        '<div class="team-cell ' + (awayActive ? '' : 'under') + '">' +
+          '<div class="label">' + awayCode + (awayIsOpener ? ' 🔄' : '') + '</div>' +
+          '<div class="ml">' + (awayML > 0 ? '+' : '') + awayML + '</div>' +
+          '<div class="model-pct">' + awayWinPct + '% model</div>' +
+        '</div>' +
+        '<div class="team-cell ' + (awayActive ? 'under' : '') + '">' +
+          '<div class="label">' + homeCode + (homeIsOpener ? ' 🔄' : '') + '</div>' +
+          '<div class="ml">' + (homeML > 0 ? '+' : '') + homeML + '</div>' +
+          '<div class="model-pct">' + homeWinPct + '% model</div>' +
+        '</div>' +
+      '</div>' +
+      (awayIsOpener || homeIsOpener ? '<div style="background:var(--warning-bg);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--warning);margin-bottom:10px;">⚡ Opener/bullpen game detected — FIP blended with team bullpen ERA</div>' : '') +
+      '<div class="recommendation ' + recClass + '">' +
+        '<div>' +
+          '<div class="rec-label">' + recLabel + '</div>' +
+          '<div class="rec-pick">' + recPick + '</div>' +
+        '</div>' +
+        '<div>' +
+          '<div class="rec-edge">' + (winEdge >= 0 ? '+' : '') + (winEdge * 100).toFixed(1) + '%</div>' +
+          '<div class="rec-edge-label">edge</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="detail-grid">' +
+        '<div class="detail-cell"><div class="label">PARK</div><div class="v">' + parkF.toFixed(2) + '×</div></div>' +
+        '<div class="detail-cell"><div class="label">WX MOD</div><div class="v">' + runMod.toFixed(3) + '×</div></div>' +
+        '<div class="detail-cell"><div class="label">BP AVG</div><div class="v">' + ((awayBpFactor + homeBpFactor) / 2).toFixed(2) + '×</div></div>' +
+      '</div>' +
+      '<div class="factor-row"><span class="label">Predicted runs (Away · Home)</span><span class="v">' + awayRuns.toFixed(2) + ' · ' + homeRuns.toFixed(2) + '</span></div>' +
+      '<div class="factor-row"><span class="label">Away offense source</span><span class="v" style="font-size:11px; color:' + (lineupXwoba.away != null ? 'var(--success)' : 'var(--text-3)') + ';">' + awayLineupSource + '</span></div>' +
+      '<div class="factor-row"><span class="label">Home offense source</span><span class="v" style="font-size:11px; color:' + (lineupXwoba.home != null ? 'var(--success)' : 'var(--text-3)') + ';">' + homeLineupSource + '</span></div>' +
+      '<div class="factor-row"><span class="label">SP quality source</span><span class="v" style="font-size:11px; color:' + ((awayHasStatcast || homeHasStatcast) ? 'var(--success)' : 'var(--text-3)') + ';">' + ((awayHasStatcast || homeHasStatcast) ? 'FIP + Statcast xwOBA blended' : 'FIP only (Statcast not available)') + '</span></div>' +
+      '<div class="factor-row"><span class="label">Predicted total</span><span class="v">' + total.toFixed(2) + '</span></div>' +
+      '<div class="factor-row"><span class="label">Total line</span><span class="v">' + totalLine + '</span></div>' +
+      '<div class="factor-row"><span class="label">Total recommendation</span><span class="v" style="color:' + (totalRec !== '—' ? 'var(--success)' : 'var(--text-3)') + ';">' + totalRec + '</span></div>' +
+      (IS_ADMIN ? '<button class="btn btn-primary" id="save-pick-btn" onclick="savePick()" style="margin-top:14px;">Save Pick to Tracker</button><div class="status" id="save-status" style="text-align:center;"></div>' : '') +
+    '</div>';
+  
+  // On mobile, scroll to results. On desktop the result column is already visible.
+  if (window.innerWidth < 900) {
+    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  
+  // Stash payload for Save Pick button (admin only)
+  window._lastPrediction = {
+    gameDate: document.getElementById('gamedate').value,
+    away: awayCode,
+    home: homeCode,
+    predictedWinner: winner,
+    winProb: winProb,
+    predictedTotal: total,
+    totalLine: totalLine,
+    mlEdge: winEdge,
+    totalEdge: totalEdge,
+    recML: recPick,
+    recTotal: totalRec
+  };
+}
+
+async function savePick() {
+  if (!IS_ADMIN) return;
+  const payload = window._lastPrediction;
+  if (!payload) return;
+  
+  const btn = document.getElementById('save-pick-btn');
+  const status = document.getElementById('save-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  if (status) { status.textContent = ''; status.className = 'status loading'; }
+  
+  const url = HARDCODED_TRACKER_URL;
+  if (!url || url.indexOf('PASTE_') === 0) {
+    if (status) { status.textContent = '✗ Tracker URL not configured.'; status.className = 'status error'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Pick to Tracker'; }
+    return;
+  }
+  
+  try {
+    const params = new URLSearchParams({ action: 'logPrediction' });
+    Object.keys(payload).forEach(k => {
+      if (payload[k] != null) params.set(k, String(payload[k]));
+    });
+    const r = await fetch(url + '?' + params.toString());
+    const data = await r.json();
+    if (!data.success) throw new Error(data.error || 'Save failed');
+    
+    // Show success based on whether it was a new entry or an update
+    const action = data.updated ? 'Updated existing pick' : 'Saved to tracker';
+    if (btn) { btn.textContent = '✓ ' + action; }
+    if (status) { status.textContent = data.updated ? 'Existing pick for this game was updated.' : 'New pick logged.'; status.className = 'status success'; }
+  } catch (e) {
+    if (status) { status.textContent = '✗ ' + e.message; status.className = 'status error'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Pick to Tracker'; }
+  }
+}
+
+// ============================================================
+// TRACKER TAB FUNCTIONS
+// ============================================================
+let CACHED_PREDICTIONS = [];
+
+async function loadTrackerData() {
+  const url = HARDCODED_TRACKER_URL;
+  if (!url || url.indexOf('PASTE_') === 0) {
+    setStatus('data-status', 'Tracker URL not configured.', 'error');
+    return;
+  }
+  setStatus('data-status', 'Fetching predictions…', 'loading');
+  try {
+    const r = await fetch(url + '?action=fetchAll');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+    CACHED_PREDICTIONS = data.predictions || [];
+    renderTrackerStats(data.stats);
+    renderTrackerLog(CACHED_PREDICTIONS);
+    setStatus('data-status', '✓ ' + CACHED_PREDICTIONS.length + ' predictions.', 'success');
+  } catch (e) {
+    setStatus('data-status', '✗ ' + e.message, 'error');
+  }
+}
+
+function renderTrackerStats(s) {
+  const grid = document.getElementById('stats');
+  const mlPct = parseFloat(s.mlWinPct);
+  const totalPct = parseFloat(s.totalWinPct);
+  const mlClass = mlPct >= 52.4 ? '' : (mlPct === 0 ? 'flat' : 'bad');
+  const totalClass = totalPct >= 52.4 ? '' : (totalPct === 0 ? 'flat' : 'bad');
+  
+  grid.innerHTML =
+    '<div class="stat-card"><div class="stat-label">LOGGED</div><div class="stat-value">' + s.totalLogged + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">SETTLED</div><div class="stat-value">' + s.settled + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">ML RECORD</div><div class="stat-value">' + s.mlRecord + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">ML WIN %</div><div class="stat-value">' + s.mlWinPct + '%</div><div class="stat-sub ' + mlClass + '">' + (mlPct >= 52.4 ? '✓ above breakeven' : (mlPct === 0 ? 'no data' : '✗ below breakeven')) + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">TOTALS RECORD</div><div class="stat-value">' + s.totalRecord + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">TOTALS WIN %</div><div class="stat-value">' + s.totalWinPct + '%</div><div class="stat-sub ' + totalClass + '">' + (totalPct >= 52.4 ? '✓ above breakeven' : (totalPct === 0 ? 'no data' : '✗ below breakeven')) + '</div></div>';
+}
+
+function renderTrackerLog(rows) {
+  const list = document.getElementById('log-list');
+  if (!rows || rows.length === 0) {
+    list.innerHTML = '<div class="empty">No predictions yet.</div>';
+    return;
+  }
+  const sorted = [...rows].reverse();
+  list.innerHTML = sorted.map(p => {
+    const date = formatTrackerDate(p.gameDate);
+    const game = (p.away || '?') + ' @ ' + (p.home || '?');
+    const pick = p.predictedWinner || '?';
+    const winPct = (p.winProb !== '' && p.winProb != null) ? p.winProb + '%' : '—';
+    const total = p.predictedTotal || '—';
+    const edge = p.mlEdge ? p.mlEdge + '%' : '—';
+    const result = renderResultPill(p.result);
+    const action = p.result ? '' : renderUpdateForm(p.id);
+    return '<div class="log-row">' +
+      '<div class="log-row-top">' +
+      '<div class="game">' + game + '</div>' +
+      '<div class="date">' + date + '</div>' +
+      '</div>' +
+      '<div class="meta">' +
+      '<span>Pick <span class="v">' + pick + '</span></span>' +
+      '<span>Win <span class="v">' + winPct + '</span></span>' +
+      '<span>Total <span class="v">' + total + '</span></span>' +
+      '<span>Edge <span class="v">' + edge + '</span></span>' +
+      '</div>' +
+      '<div style="margin-top:6px;">' + result + '</div>' +
+      action +
+      '</div>';
+  }).join('');
+}
+
+function formatTrackerDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return String(d).substring(0, 10);
+  return (dt.getMonth() + 1) + '/' + dt.getDate();
+}
+
+function renderResultPill(r) {
+  if (!r) return '<span class="pill pill-pending">PENDING</span>';
+  const m = String(r).match(/ML\s+(\w)/);
+  const t = String(r).match(/Total\s+(\w)/);
+  let html = '';
+  if (m) html += '<span class="pill pill-' + m[1].toLowerCase() + '">ML ' + m[1] + '</span> ';
+  if (t) html += '<span class="pill pill-' + t[1].toLowerCase() + '">T ' + t[1] + '</span>';
+  return html;
+}
+
+function renderUpdateForm(id) {
+  return '<div class="row-actions">' +
+    '<input type="text" id="winner_' + id + '" placeholder="Winner">' +
+    '<input type="number" step="0.5" id="total_' + id + '" placeholder="Total">' +
+    '<button onclick="submitTrackerResult(\'' + id + '\')">Save</button>' +
+    '</div>';
+}
+
+async function submitTrackerResult(id) {
+  const winner = document.getElementById('winner_' + id).value.trim().toUpperCase();
+  const total = document.getElementById('total_' + id).value.trim();
+  if (!winner) { alert('Enter winner abbreviation'); return; }
+  if (!total) { alert('Enter actual total'); return; }
+  try {
+    const params = new URLSearchParams({ action: 'updateResult', id: id, actualWinner: winner, actualTotal: total });
+    const r = await fetch(HARDCODED_TRACKER_URL + '?' + params.toString());
+    const data = await r.json();
+    if (!data.success) throw new Error(data.error || 'Failed');
+    setStatus('data-status', '✓ Saved.', 'success');
+    loadTrackerData();
+  } catch (e) {
+    setStatus('data-status', '✗ ' + e.message, 'error');
+  }
+}
+
+async function autoUpdateYesterday() {
+  setStatus('data-status', 'Pulling yesterday…', 'loading');
+  try {
+    const r = await fetch(HARDCODED_TRACKER_URL + '?action=autoUpdateYesterday');
+    const data = await r.json();
+    if (!data.success) throw new Error(data.error || 'Failed');
+    setStatus('data-status', '✓ Updated ' + data.updated + ' games from yesterday.', 'success');
+    loadTrackerData();
+  } catch (e) {
+    setStatus('data-status', '✗ ' + e.message, 'error');
+  }
+}
+
+async function checkAllPending() {
+  setStatus('data-status', 'Checking all pending results…', 'loading');
+  try {
+    const r = await fetch(HARDCODED_TRACKER_URL + '?action=checkAllPending');
+    const data = await r.json();
+    if (!data.success) throw new Error(data.error || 'Failed');
+    const msg = data.updated > 0
+      ? '✓ Updated ' + data.updated + ' result' + (data.updated > 1 ? 's' : '') +
+        ' · ' + (data.today || 0) + ' today · ' + (data.yesterday || 0) + ' yesterday'
+      : '✓ No new results — games may still be in progress';
+    setStatus('data-status', msg, data.updated > 0 ? 'success' : '');
+    if (data.updated > 0) loadTrackerData();
+  } catch (e) {
+    setStatus('data-status', '✗ ' + e.message, 'error');
+  }
+}
+</script>
+</body>
+</html>
