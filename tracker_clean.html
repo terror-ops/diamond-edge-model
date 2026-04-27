@@ -379,9 +379,9 @@ body {
 <div class="stats-grid" id="stats-grid">
     <div class="stat-card"><div class="stat-label">Logged</div><div class="stat-value" id="s-logged">—</div></div>
     <div class="stat-card"><div class="stat-label">Settled</div><div class="stat-value" id="s-settled">—</div></div>
-    <div class="stat-card" id="sc-ml"><div class="stat-label">ML Record</div><div class="stat-value" id="s-ml-rec">—</div><div class="stat-sub" id="s-ml-sub"></div></div>
+    <div class="stat-card" id="sc-ml"><div class="stat-label">ML Record</div><div class="stat-value" id="s-ml-rec">—</div></div>
     <div class="stat-card" id="sc-ml-pct"><div class="stat-label">ML Win %</div><div class="stat-value" id="s-ml-pct">—</div></div>
-    <div class="stat-card" id="sc-tot"><div class="stat-label">Totals Record</div><div class="stat-value" id="s-tot-rec">—</div><div class="stat-sub" id="s-tot-sub"></div></div>
+    <div class="stat-card" id="sc-tot"><div class="stat-label">Totals Record</div><div class="stat-value" id="s-tot-rec">—</div></div>
     <div class="stat-card" id="sc-tot-pct"><div class="stat-label">Totals Win %</div><div class="stat-value" id="s-tot-pct">—</div></div>
   </div>
 
@@ -739,13 +739,6 @@ function renderStats(rows) {
   const bev = 52.4;
   if (mlPct)  styleCard('sc-ml-pct',  parseFloat(mlPct)  >= bev);
   if (totPct) styleCard('sc-tot-pct', parseFloat(totPct) >= bev);
-
-  const mlSub  = mlPct  ? (parseFloat(mlPct)  >= bev ? '✓ above breakeven' : '✗ below breakeven') : 'no data yet';
-  const totSub = totPct ? (parseFloat(totPct) >= bev ? '✓ above breakeven' : '✗ below breakeven') : 'no data yet';
-  const mlEl  = document.getElementById('s-ml-sub');
-  const totEl = document.getElementById('s-tot-sub');
-  if (mlEl)  { mlEl.textContent = mlSub;  mlEl.className = 'stat-sub ' + (mlPct  && parseFloat(mlPct)  >= bev ? 'up' : 'down'); }
-  if (totEl) { totEl.textContent = totSub; totEl.className = 'stat-sub ' + (totPct && parseFloat(totPct) >= bev ? 'up' : 'down'); }
 }
 
 function styleCard(id, positive) {
