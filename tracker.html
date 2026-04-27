@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diamond Edge · Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080b0f;
+  --surface: #0f1318;
+  --surface2: #161c24;
+  --surface3: #1e2630;
+  --border: #232d3a;
+  --text: #e8edf2;
+  --text2: #8a95a3;
+  --text3: #4a5568;
+  --green: #00d084;
+  --green-bg: rgba(0,208,132,0.1);
+  --green-border: rgba(0,208,132,0.25);
+  --red: #ff4757;
+  --red-bg: rgba(255,71,87,0.1);
+  --red-border: rgba(255,71,87,0.25);
+  --amber: #ffa502;
+  --amber-bg: rgba(255,165,2,0.1);
+  --blue: #2e86de;
+  --blue-bg: rgba(46,134,222,0.1);
+  --mono: 'JetBrains Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Space Grotesk', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 24px 20px 48px;
+}
+
+.container { max-width: 1100px; margin: 0 auto; }
+
+/* ── HEADER ── */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-icon {
+  width: 40px; height: 40px;
+  background: var(--green);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+}
+.brand-name { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+.brand-sub { font-size: 11px; color: var(--text3); letter-spacing: 0.1em; margin-top: 1px; }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.back-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+.back-btn:hover { border-color: var(--green); color: var(--green); }
+.auto-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text3);
+  font-family: var(--mono);
+}
+.auto-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ── STATS GRID ── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+@media (max-width: 900px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 500px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--green);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.stat-card.positive::before { opacity: 1; background: var(--green); }
+.stat-card.negative::before { opacity: 1; background: var(--red); }
+.stat-label { font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+.stat-value { font-size: 28px; font-weight: 700; font-family: var(--mono); letter-spacing: -0.02em; }
+.stat-sub { font-size: 10px; color: var(--text3); margin-top: 4px; }
+.stat-sub.up { color: var(--green); }
+.stat-sub.down { color: var(--red); }
+
+/* ── CHART ── */
+.chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media (max-width: 700px) { .chart-row { grid-template-columns: 1fr; } }
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.chart-title {
+  font-size: 11px;
+  color: var(--text3);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.bar-chart { display: flex; flex-direction: column; gap: 10px; }
+.bar-row { display: flex; align-items: center; gap: 10px; }
+.bar-label { font-size: 11px; color: var(--text2); width: 80px; flex-shrink: 0; font-family: var(--mono); }
+.bar-track {
+  flex: 1; height: 6px;
+  background: var(--surface3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--green);
+  transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+}
+.bar-fill.red { background: var(--red); }
+.bar-val { font-size: 11px; color: var(--text2); font-family: var(--mono); width: 36px; text-align: right; }
+
+.sparkline-wrap { display: flex; align-items: flex-end; gap: 3px; height: 48px; }
+.spark-bar {
+  flex: 1;
+  border-radius: 2px 2px 0 0;
+  min-height: 3px;
+  transition: height 0.4s ease;
+}
+.spark-bar.w { background: var(--green); }
+.spark-bar.l { background: var(--red); }
+.spark-bar.p { background: var(--text3); }
+.spark-bar.pending { background: var(--amber); opacity: 0.4; }
+
+/* ── CONTROLS ── */
+.controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn:hover { border-color: var(--text2); color: var(--text); }
+.btn.primary { background: var(--green); border-color: var(--green); color: #000; font-weight: 600; }
+.btn.primary:hover { background: #00e891; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.status-msg { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+.status-msg.ok { color: var(--green); }
+.status-msg.err { color: var(--red); }
+.status-msg.loading { color: var(--amber); }
+.filter-row { display: flex; gap: 6px; margin-left: auto; }
+.filter-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text3);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.filter-btn.active { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+
+/* ── LOG TABLE ── */
+.log-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.log-table { width: 100%; border-collapse: collapse; }
+.log-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+  font-weight: 500;
+}
+.log-table td {
+  padding: 12px 14px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.log-table tr:last-child td { border-bottom: none; }
+.log-table tr:hover td { background: var(--surface2); }
+.game-cell { font-weight: 600; }
+.game-cell .away { color: var(--text2); }
+.game-cell .home { color: var(--text); }
+.mono { font-family: var(--mono); font-size: 12px; }
+.pick-cell { font-family: var(--mono); font-weight: 500; }
+.edge-pos { color: var(--green); }
+.edge-neg { color: var(--red); }
+.edge-flat { color: var(--text3); }
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  font-family: var(--mono);
+}
+.pill-w { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+.pill-l { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+.pill-p { background: var(--surface3); color: var(--text3); border: 1px solid var(--border); }
+.pill-pending { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(255,165,2,0.25); }
+
+/* Manual result entry */
+.result-entry { display: flex; gap: 4px; align-items: center; }
+.mini-input {
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  width: 70px;
+}
+.mini-input:focus { outline: none; border-color: var(--green); }
+.save-btn {
+  background: var(--green);
+  border: none;
+  color: #000;
+  padding: 4px 10px;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.save-btn:hover { background: #00e891; }
+
+.empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--text3);
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .log-table th:nth-child(n+5),
+  .log-table td:nth-child(n+5) { display: none; }
+}
+
+/* STREAK */
+.streak-banner{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 20px;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+.streak-num{font-size:40px;font-weight:700;font-family:var(--mono);line-height:1;}
+.streak-num.green{color:var(--green);}
+.streak-num.red{color:var(--red);}
+.streak-dots{display:flex;gap:4px;margin-top:4px;}
+.streak-dot{width:9px;height:9px;border-radius:50%;}
+.streak-dot.w{background:var(--green);}
+.streak-dot.l{background:var(--red);}
+/* ROI stat */
+.roi-pos{color:var(--green)!important;}
+.roi-neg{color:var(--red)!important;}
+/* Date tabs */
+.date-tabs{display:flex;gap:2px;background:var(--surface2);border-radius:8px;padding:3px;width:fit-content;margin-bottom:10px;}
+.date-tab{background:transparent;border:none;color:var(--text3);padding:6px 14px;border-radius:6px;font-family:inherit;font-size:12px;cursor:pointer;transition:all 0.15s;font-weight:500;}
+.date-tab.active{background:var(--surface3);color:var(--text);}
+/* Row colors */
+.log-table tr.row-w td{background:rgba(0,208,132,0.03);}
+.log-table tr.row-l td{background:rgba(255,71,87,0.03);}
+.log-table tr.row-w:hover td{background:rgba(0,208,132,0.07);}
+.log-table tr.row-l:hover td{background:rgba(255,71,87,0.07);}
+/* Bankroll */
+.bankroll-chart{height:70px;margin-bottom:6px;}
+.bankroll-svg{width:100%;height:100%;overflow:visible;}
+/* Sort headers */
+.log-table th{cursor:pointer;}
+.log-table th:hover{color:var(--text2);}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="brand">
+      <div class="brand-icon">📈</div>
+      <div>
+        <div class="brand-name">Diamond Edge</div>
+        <div class="brand-sub">PERFORMANCE TRACKER</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="auto-badge">
+        <div class="auto-dot"></div>
+        <span id="auto-label">auto-check: on</span>
+      </div>
+      <a href="index.html" class="back-btn">← Model</a>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <!-- STREAK -->
+<div class="streak-banner">
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div><div class="streak-num" id="streak-num">—</div></div>
+    <div><div style="font-size:14px;font-weight:600;" id="streak-type">Loading…</div><div class="streak-dots" id="streak-dots"></div></div>
+  </div>
+  <div style="font-size:11px;color:var(--text3);font-family:var(--mono);" id="streak-last"></div>
+</div>
+<div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="stat-label">Logged</div><div class="stat-value" id="s-logged">—</div></div>
+    <div class="stat-card"><div class="stat-label">Settled</div><div class="stat-value" id="s-settled">—</div></div>
+    <div class="stat-card" id="sc-ml"><div class="stat-label">ML Record</div><div class="stat-value" id="s-ml-rec">—</div></div>
+    <div class="stat-card" id="sc-ml-pct"><div class="stat-label">ML Win %</div><div class="stat-value" id="s-ml-pct">—</div></div>
+    <div class="stat-card" id="sc-tot"><div class="stat-label">Totals Record</div><div class="stat-value" id="s-tot-rec">—</div></div>
+    <div class="stat-card" id="sc-tot-pct"><div class="stat-label">Totals Win %</div><div class="stat-value" id="s-tot-pct">—</div></div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="chart-card" style="margin-bottom:12px;">
+  <div class="chart-title">Bankroll curve (units)</div>
+  <div class="bankroll-chart"><svg class="bankroll-svg" id="bankroll-svg" viewBox="0 0 600 70" preserveAspectRatio="none"></svg></div>
+  <div style="display:flex;justify-content:space-between;"><span style="font-size:10px;color:var(--text3);font-family:var(--mono);" id="bank-start">Start: 0u</span><span style="font-size:10px;color:var(--text3);font-family:var(--mono);" id="bank-end">Now: 0u</span></div>
+</div>
+<div class="chart-row">
+    <div class="chart-card">
+      <div class="chart-title">Recent results (last 20)</div>
+      <div class="sparkline-wrap" id="sparkline"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Win rate by bet type</div>
+      <div class="bar-chart" id="bar-chart"></div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="date-tabs">
+  <button class="date-tab active" onclick="setDateRange('all',this)">All time</button>
+  <button class="date-tab" onclick="setDateRange('month',this)">This month</button>
+  <button class="date-tab" onclick="setDateRange('week',this)">This week</button>
+  <button class="date-tab" onclick="setDateRange('today',this)">Today</button>
+</div>
+<div class="controls">
+    <button class="btn primary" onclick="checkResults()">⚡ Check Results</button>
+    <button class="btn" onclick="loadData()">↻ Reload</button>
+    <span class="status-msg" id="status-msg"></span>
+    <div class="filter-row">
+      <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+      <button class="filter-btn" onclick="setFilter('pending',this)">Pending</button>
+      <button class="filter-btn" onclick="setFilter('settled',this)">Settled</button>
+      <button class="filter-btn" onclick="setFilter('w',this)">W</button>
+      <button class="filter-btn" onclick="setFilter('l',this)">L</button>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="log-card">
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>Game</th>
+          <th>Pick</th>
+          <th>Win %</th>
+          <th>Edge</th>
+          <th>Total</th>
+          <th>Line</th>
+          <th>ML Result</th>
+          <th>Total Result</th>
+          <th>Update</th>
+        </tr>
+      </thead>
+      <tbody id="log-body">
+        <tr><td colspan="9"><div class="empty-state">Loading predictions…</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────
+const SHEET_URL  = 'https://script.google.com/macros/s/AKfycbzINtK__4ges-rEU6Qqg-XP467pKRK5ljVUP6sMSQ0H1zRbB1FLtpY1A7pjM_6Sx-7d/exec';
+const MLB_API    = 'https://statsapi.mlb.com/api/v1';
+const PROXIES    = [
+  u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
+  u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+  u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u)
+];
+
+const TEAM_NAMES = {
+  'Arizona Diamondbacks':'ARI','Atlanta Braves':'ATL','Baltimore Orioles':'BAL',
+  'Boston Red Sox':'BOS','Chicago Cubs':'CHC','Chicago White Sox':'CWS',
+  'Cincinnati Reds':'CIN','Cleveland Guardians':'CLE','Colorado Rockies':'COL',
+  'Detroit Tigers':'DET','Houston Astros':'HOU','Kansas City Royals':'KC',
+  'Los Angeles Angels':'LAA','Los Angeles Dodgers':'LAD','Miami Marlins':'MIA',
+  'Milwaukee Brewers':'MIL','Minnesota Twins':'MIN','New York Mets':'NYM',
+  'New York Yankees':'NYY','Athletics':'OAK','Oakland Athletics':'OAK',
+  'Philadelphia Phillies':'PHI','Pittsburgh Pirates':'PIT','San Diego Padres':'SD',
+  'San Francisco Giants':'SF','Seattle Mariners':'SEA','St. Louis Cardinals':'STL',
+  'Tampa Bay Rays':'TB','Texas Rangers':'TEX','Toronto Blue Jays':'TOR',
+  'Washington Nationals':'WAS'
+};
+
+// ─── STATE ────────────────────────────────────────────────
+let ALL_ROWS = [];
+let FILTER   = 'all';
+let DATE_RANGE = 'all';
+let SORT_KEY = null;
+let SORT_DIR = 1;
+
+// ─── SHEET API ────────────────────────────────────────────
+async function sheetGet(action = 'read') {
+  const r = await fetch(SHEET_URL + '?action=' + action);
+  return r.json();
+}
+
+async function sheetPost(body) {
+  const r = await fetch(SHEET_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+
+// ─── MLB SCORES via proxy ─────────────────────────────────
+async function proxyFetch(url) {
+  for (const p of PROXIES) {
+    try {
+      const r = await fetch(p(url));
+      if (!r.ok) continue;
+      return await r.json();
+    } catch(e) { /* try next */ }
+  }
+  throw new Error('All proxies failed');
+}
+
+async function fetchScores(dateStr) {
+  const url = MLB_API + '/schedule?sportId=1&date=' + dateStr + '&hydrate=linescore';
+  const d   = await proxyFetch(url);
+  const map = {};
+  if (!d.dates || !d.dates[0]) return map;
+  d.dates[0].games.forEach(g => {
+    if (g.status.statusCode !== 'F') return;
+    const a = TEAM_NAMES[g.teams.away.team.name];
+    const h = TEAM_NAMES[g.teams.home.team.name];
+    if (!a || !h) return;
+    const as = g.teams.away.score || 0;
+    const hs = g.teams.home.score || 0;
+    map[a + '@' + h] = { winner: hs > as ? h : a, total: as + hs };
+  });
+  return map;
+}
+
+// ─── GRADING ──────────────────────────────────────────────
+function gradeML(pick, winner) {
+  if (!pick || !winner) return null;
+  return pick.trim().toUpperCase() === winner.trim().toUpperCase() ? 'W' : 'L';
+}
+
+function gradeTotal(recTotal, totalLine, actualTotal) {
+  if (!recTotal || totalLine == null || actualTotal == null) return null;
+  const line = parseFloat(totalLine);
+  const actual = parseFloat(actualTotal);
+  if (isNaN(line) || isNaN(actual)) return null;
+  if (recTotal.indexOf('OVER') === 0)  return actual > line ? 'W' : actual === line ? 'P' : 'L';
+  if (recTotal.indexOf('UNDER') === 0) return actual < line ? 'W' : actual === line ? 'P' : 'L';
+  return null;
+}
+
+// ─── MAIN: CHECK RESULTS ──────────────────────────────────
+async function checkResults() {
+  setStatus('Checking MLB scores…', 'loading');
+
+  // Get all unique dates from pending rows
+  const pending = ALL_ROWS.filter(r => !r.result);
+  if (pending.length === 0) { setStatus('No pending predictions.', 'ok'); return; }
+
+  const dates = [...new Set(pending.map(r => (r.date || '').substring(0,10)).filter(Boolean))];
+  
+  // Fetch scores for each date
+  const scoresByDate = {};
+  for (const d of dates) {
+    try { scoresByDate[d] = await fetchScores(d); } catch(e) { /* skip */ }
+  }
+
+  let updated = 0;
+  for (const row of pending) {
+    const dateStr = (row.date || '').substring(0,10);
+    const scores  = scoresByDate[dateStr];
+    if (!scores) continue;
+
+    const key    = row.away + '@' + row.home;
+    const result = scores[key];
+    if (!result) continue; // game not final yet
+
+    const mlGrade    = gradeML(row.pick, result.winner);
+    const totalGrade = gradeTotal(row.recTotal, row.totalLine, result.total);
+    const resultStr  = 'ML ' + (mlGrade||'?') + ' / Total ' + (totalGrade||'-');
+
+    const fields = {
+      actualWinner: result.winner,
+      actualTotal:  result.total,
+      result:       resultStr
+    };
+
+    try {
+      await sheetPost({ action: 'update', id: row.id, fields });
+      // Update local state
+      Object.assign(row, fields);
+      updated++;
+    } catch(e) { /* continue */ }
+  }
+
+  if (updated > 0) {
+    render();
+    setStatus('✓ Updated ' + updated + ' result' + (updated > 1 ? 's' : ''), 'ok');
+  } else {
+    setStatus('✓ Checked — no new final scores yet', 'ok');
+  }
+}
+
+function calcROI(row) {
+  const mlR = parseResultPart(row.result,'ML');
+  if (!mlR || mlR==='?') return null;
+  if (mlR==='L') return -1;
+  const m = String(row.recML||'').match(/([+-]\d+)/);
+  if (!m) return 1;
+  const odds = parseInt(m[1]);
+  if (odds > 0) return odds/100;
+  if (odds < 0) return 100/Math.abs(odds);
+  return 1;
+}
+
+function setDateRange(r, btn) {
+  DATE_RANGE = r;
+  document.querySelectorAll('.date-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function sortBy(key) {
+  if (SORT_KEY===key) SORT_DIR*=-1; else { SORT_KEY=key; SORT_DIR=-1; }
+  render();
+}
+
+function getFilteredRows() {
+  let rows = [...ALL_ROWS];
+  const now = new Date();
+  const today = now.toISOString().substring(0,10);
+  const weekAgo  = new Date(now-7*86400000).toISOString().substring(0,10);
+  const monthAgo = new Date(now-30*86400000).toISOString().substring(0,10);
+  if (DATE_RANGE==='today') rows=rows.filter(r=>(r.date||'').substring(0,10)===today);
+  if (DATE_RANGE==='week')  rows=rows.filter(r=>(r.date||'').substring(0,10)>=weekAgo);
+  if (DATE_RANGE==='month') rows=rows.filter(r=>(r.date||'').substring(0,10)>=monthAgo);
+  if (FILTER==='pending') rows=rows.filter(r=>!r.result||r.result.includes('?'));
+  if (FILTER==='settled') rows=rows.filter(r=>r.result&&!r.result.includes('?'));
+  if (FILTER==='w') rows=rows.filter(r=>/ML W/.test(r.result));
+  if (FILTER==='l') rows=rows.filter(r=>/ML L/.test(r.result));
+  if (SORT_KEY) rows.sort((a,b)=>{
+    let av=parseFloat(a[SORT_KEY])||0, bv=parseFloat(b[SORT_KEY])||0;
+    return (av-bv)*SORT_DIR;
+  });
+  return rows;
+}
+
+function renderStreak(rows) {
+  const settled = rows.filter(r=>r.result&&!r.result.includes('?'));
+  if (!settled.length) { setText('streak-num','—'); setText('streak-type','No results yet'); return; }
+  const grades = settled.map(r=>{ const m=String(r.result).match(/ML\s+(\w)/); return m?m[1]:null; }).filter(Boolean);
+  let streak=0, type=grades[0];
+  for (const g of grades) { if(g===type) streak++; else break; }
+  const numEl=document.getElementById('streak-num');
+  if(numEl){ numEl.textContent=streak; numEl.className='streak-num '+(type==='W'?'green':'red'); }
+  setText('streak-type', type==='W'?'WIN STREAK 🔥':'LOSING STREAK');
+  setText('streak-last','Last: '+grades.slice(0,5).join(' '));
+  const dots=document.getElementById('streak-dots');
+  if(dots) dots.innerHTML=grades.slice(0,10).map(g=>`<div class="streak-dot ${g.toLowerCase()}"></div>`).join('');
+}
+
+function renderBankroll(rows) {
+  const settled=rows.filter(r=>r.result&&!r.result.includes('?')).reverse();
+  let units=0, points=[0];
+  settled.forEach(r=>{ const roi=calcROI(r); if(roi!==null){units+=roi;points.push(units);} });
+  const svg=document.getElementById('bankroll-svg');
+  if(!svg) return;
+  if(points.length<2){ svg.innerHTML='<text x="300" y="35" text-anchor="middle" fill="#4a5568" font-size="12" font-family="Space Grotesk">No settled results yet</text>'; return; }
+  const W=600,H=70,pad=4, min=Math.min(...points), max=Math.max(...points), range=max-min||1;
+  const xs=points.map((_,i)=>pad+(W-2*pad)*i/(points.length-1));
+  const ys=points.map(v=>H-pad-(H-2*pad)*(v-min)/range);
+  const path='M '+xs.map((x,i)=>x+','+ys[i]).join(' L ');
+  const fill='M '+xs[0]+','+H+' L '+xs.map((x,i)=>x+','+ys[i]).join(' L ')+' L '+xs[xs.length-1]+','+H+' Z';
+  const color=units>=0?'#00d084':'#ff4757';
+  svg.innerHTML=`<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.2"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><path d="${fill}" fill="url(#bg)"/><path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/><circle cx="${xs[xs.length-1]}" cy="${ys[ys.length-1]}" r="3" fill="${color}"/>`;
+  setText('bank-start','Start: 0u');
+  setText('bank-end','Now: '+(units>=0?'+':'')+units.toFixed(2)+'u');
+}
+
+function renderROI(rows) {
+  const settled=rows.filter(r=>r.result&&!r.result.includes('?'));
+  let roi=0, count=0;
+  settled.forEach(r=>{ const r2=calcROI(r); if(r2!==null){roi+=r2;count++;} });
+  const el=document.getElementById('s-roi');
+  if(el){ el.textContent=(roi>=0?'+':'')+roi.toFixed(2)+'u'; el.className='stat-value '+(roi>=0?'roi-pos':'roi-neg'); }
+  setText('s-roi-sub', count>0?'from '+count+' settled':'—');
+}
+
+
+async function loadData() {
+  setStatus('Loading…', 'loading');
+  try {
+    const d = await sheetGet('read');
+    if (!d.success) throw new Error(d.error || 'Failed');
+    ALL_ROWS = (d.rows || []).reverse(); // most recent first
+    render();
+    setStatus('✓ ' + ALL_ROWS.length + ' predictions', 'ok');
+  } catch(e) {
+    setStatus('✗ ' + e.message, 'err');
+  }
+}
+
+// ─── RENDER ───────────────────────────────────────────────
+function render() {
+  const rows = getFilteredRows();
+  // Auto-grade rows with actualWinner
+  rows.forEach(r => {
+    if (r.actualWinner && (!r.result || r.result.includes('?'))) {
+      const mlG  = gradeML(r.pick, r.actualWinner);
+      const totG = gradeTotal(r.recTotal, r.totalLine, r.actualTotal);
+      r.result   = 'ML '+(mlG||'?')+' / Total '+(totG||'-');
+    }
+  });
+  renderStreak(rows);
+  renderStats(rows);
+  renderBankroll(rows);
+  renderROI(rows);
+  renderCharts(rows);
+  renderLog(rows);
+}
+
+function renderStats(rows) {
+  // Auto-grade any row with actualWinner but no result string
+  ALL_ROWS.forEach(r => {
+    if (r.actualWinner && !r.result) {
+      const mlG  = gradeML(r.pick, r.actualWinner);
+      const totG = gradeTotal(r.recTotal, r.totalLine, r.actualTotal);
+      r.result   = 'ML ' + (mlG||'?') + ' / Total ' + (totG||'-');
+    }
+  });
+
+  const settled = (rows||ALL_ROWS).filter(r => r.result && !r.result.includes('?'));
+  let mlW=0,mlL=0,totW=0,totL=0,totP=0;
+  settled.forEach(r => {
+    const m = String(r.result).match(/ML\s+(\w)/);
+    const t = String(r.result).match(/Total\s+(\w)/);
+    if (m) { if(m[1]==='W') mlW++; else if(m[1]==='L') mlL++; }
+    if (t) { if(t[1]==='W') totW++; else if(t[1]==='L') totL++; else if(t[1]==='P') totP++; }
+  });
+  const mlG = mlW+mlL, totG = totW+totL;
+  const mlPct  = mlG  > 0 ? (mlW/mlG*100).toFixed(1)  : null;
+  const totPct = totG > 0 ? (totW/totG*100).toFixed(1) : null;
+
+  setText('s-logged',   ALL_ROWS.length);
+  setText('s-settled',  settled.length);
+  setText('s-ml-rec',   mlG  > 0 ? mlW+'-'+mlL  : '—');
+  setText('s-tot-rec',  totG > 0 ? totW+'-'+totL+(totP?'-'+totP:'') : '—');
+  setText('s-ml-pct',   mlPct  ? mlPct+'%'  : '—');
+  setText('s-tot-pct',  totPct ? totPct+'%' : '—');
+
+  const bev = 52.4;
+  if (mlPct)  styleCard('sc-ml-pct',  parseFloat(mlPct)  >= bev);
+  if (totPct) styleCard('sc-tot-pct', parseFloat(totPct) >= bev);
+}
+
+function styleCard(id, positive) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('positive', positive);
+  el.classList.toggle('negative', !positive);
+}
+
+function renderCharts(rows) {
+  const allRows = rows || ALL_ROWS;
+  // Sparkline — last 20 settled results
+  const settled = allRows.filter(r => r.result && !r.result.includes('?')).slice(0, 20).reverse();
+  const spark = document.getElementById('sparkline');
+  if (!spark) return;
+  if (settled.length === 0) { spark.innerHTML = '<div style="color:var(--text3);font-size:11px;">No settled results yet</div>'; return; }
+  const maxH = 48;
+  spark.innerHTML = settled.map(r => {
+    const m = String(r.result).match(/ML\s+(\w)/);
+    const grade = m ? m[1].toLowerCase() : 'pending';
+    const h = grade === 'w' ? maxH : grade === 'l' ? 20 : 10;
+    return `<div class="spark-bar ${grade}" style="height:${h}px;" title="${r.away}@${r.home}: ${r.result}"></div>`;
+  }).join('');
+
+  // Bar chart — win rates by category
+  const bc = document.getElementById('bar-chart');
+  if (!bc) return;
+  const cats = [
+    { label: 'ML overall', rows: settled.filter(r => /ML [WL]/.test(r.result)), key: 'ML' },
+    { label: 'Totals',     rows: settled.filter(r => /Total [WL]/.test(r.result)), key: 'Total' },
+    { label: '+EV picks',  rows: settled.filter(r => parseFloat(r.mlEdge) >= 4), key: 'ML' },
+  ];
+  bc.innerHTML = cats.map(cat => {
+    let w=0, l=0;
+    cat.rows.forEach(r => {
+      const m = String(r.result).match(new RegExp(cat.key + '\\s+(\\w)'));
+      if (m) { if(m[1]==='W') w++; else if(m[1]==='L') l++; }
+    });
+    const total = w+l;
+    const pct   = total > 0 ? Math.round(w/total*100) : 0;
+    const bad   = total > 0 && pct < 52;
+    return `<div class="bar-row">
+      <div class="bar-label">${cat.label}</div>
+      <div class="bar-track"><div class="bar-fill ${bad?'red':''}" style="width:${pct}%"></div></div>
+      <div class="bar-val">${total > 0 ? pct+'%' : '—'}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderLog(filteredRows) {
+  const body = document.getElementById('log-body');
+  const rows = filteredRows || ALL_ROWS;
+
+  if (rows.length === 0) {
+    body.innerHTML = `<tr><td colspan="10"><div class="empty-state">No predictions match this filter.</div></td></tr>`;
+    return;
+  }
+
+  body.innerHTML = rows.map(r => {
+    const awayTeam  = r.away || '';
+    const homeTeam  = r.home || '';
+    const date      = formatDate(r.date);
+    const edgePct   = parseFloat(r.mlEdge);
+    const edgeCls   = isNaN(edgePct) ? 'edge-flat' : edgePct >= 4 ? 'edge-pos' : edgePct <= -4 ? 'edge-neg' : 'edge-flat';
+    const edgeStr   = isNaN(edgePct) ? '—' : (edgePct>0?'+':'') + edgePct.toFixed(1) + '%';
+    const mlR       = parseResultPart(r.result, 'ML');
+    const totR      = parseResultPart(r.result, 'Total');
+    const isSettled = r.result && !r.result.includes('?');
+    const rowCls    = mlR==='W' ? 'row-w' : mlR==='L' ? 'row-l' : 'row-pending';
+    
+    // ROI for this pick
+    const roi    = calcROI(r);
+    const roiStr = roi===null ? '—' : roi>=0
+      ? `<span style="color:var(--green);font-family:var(--mono);font-size:12px;">+${roi.toFixed(2)}u</span>`
+      : `<span style="color:var(--red);font-family:var(--mono);font-size:12px;">${roi.toFixed(2)}u</span>`;
+
+    const updateCell = !isSettled
+      ? `<div class="result-entry">
+           <input class="mini-input" id="w_${r.id}" placeholder="Winner">
+           <input class="mini-input" id="t_${r.id}" placeholder="Total" type="number" step="0.5">
+           <button class="save-btn" onclick="saveManual('${r.id}')">Save</button>
+         </div>`
+      : '';
+
+    return `<tr class="${rowCls}">
+      <td><div class="game-cell"><span class="away">${awayTeam}</span>${awayTeam?' @ ':''}<span class="home">${homeTeam}</span><div style="font-size:10px;color:var(--text3);margin-top:2px;">${date}</div></div></td>
+      <td><div class="pick-cell">${r.pick||'—'}</div><div style="font-size:10px;color:var(--text3);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.recML||''}</div></td>
+      <td class="mono">${r.winPct||'—'}</td>
+      <td class="mono ${edgeCls}">${edgeStr}</td>
+      <td class="mono">${r.predTotal||'—'}</td>
+      <td class="mono">${r.totalLine||'—'}</td>
+      <td>${pillHtml(mlR)}</td>
+      <td>${pillHtml(totR)}</td>
+      <td>${roiStr}</td>
+      <td>${updateCell}</td>
+    </tr>`;
+  }).join('');
+}
+
+function parseResultPart(result, key) {
+  if (!result) return null;
+  const m = String(result).match(new RegExp(key + '\\s+(\\w)'));
+  return m ? m[1] : null;
+}
+
+function pillHtml(grade) {
+  if (!grade) return '<span class="pill pill-pending">PENDING</span>';
+  const cls = grade === 'W' ? 'pill-w' : grade === 'L' ? 'pill-l' : 'pill-p';
+  return `<span class="pill ${cls}">${grade}</span>`;
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt)) return String(d).substring(0,10);
+  return (dt.getMonth()+1) + '/' + dt.getDate();
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status-msg');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status-msg ' + (type||'');
+}
+
+function setFilter(f, btn) {
+  FILTER = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderLog();
+}
+
+// ─── MANUAL SAVE ──────────────────────────────────────────
+async function saveManual(id) {
+  const winnerEl = document.getElementById('w_' + id);
+  const totalEl  = document.getElementById('t_' + id);
+  if (!winnerEl || !totalEl) return;
+
+  const winner = winnerEl.value.trim().toUpperCase();
+  const total  = parseFloat(totalEl.value);
+  if (!winner) { alert('Enter winner team code (e.g. NYY)'); return; }
+  if (isNaN(total)) { alert('Enter actual total runs'); return; }
+
+  const row = ALL_ROWS.find(r => r.id === id);
+  if (!row) return;
+
+  const mlGrade    = gradeML(row.pick, winner);
+  const totalGrade = gradeTotal(row.recTotal, row.totalLine, total);
+  const resultStr  = 'ML ' + (mlGrade||'?') + ' / Total ' + (totalGrade||'-');
+
+  const fields = { actualWinner: winner, actualTotal: total, result: resultStr };
+  setStatus('Saving…', 'loading');
+
+  try {
+    await sheetPost({ action: 'update', id, fields });
+    Object.assign(row, fields);
+    render();
+    setStatus('✓ Saved', 'ok');
+  } catch(e) {
+    setStatus('✗ ' + e.message, 'err');
+  }
+}
+
+// ─── AUTO-CHECK every 30 minutes ─────────────────────────
+let autoInterval = null;
+
+function startAutoCheck() {
+  if (autoInterval) return;
+  autoInterval = setInterval(() => {
+    const hasPending = ALL_ROWS.some(r => !r.result);
+    if (hasPending) {
+      console.log('Auto-checking results…');
+      checkResults();
+    }
+  }, 30 * 60 * 1000); // 30 minutes
+}
+
+// ─── INIT ─────────────────────────────────────────────────
+loadData().then(() => {
+  startAutoCheck();
+});
+</script>
+</body>
+</html>

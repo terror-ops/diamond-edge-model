@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diamond Edge — Performance Tracker</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', 'Menlo', monospace;
+    background: #050507;
+    color: #e8e8e0;
+    margin: 0;
+    padding: 24px 16px;
+    min-height: 100vh;
+  }
+  .container { max-width: 720px; margin: 0 auto; }
+  .card {
+    background: #0e0e10;
+    border: 1px solid rgba(232, 88, 75, 0.25);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  .card-accent { border-color: rgba(232, 174, 75, 0.45); }
+  .header { display: flex; align-items: center; gap: 14px; padding: 6px 0 14px; }
+  .logo {
+    width: 44px; height: 44px;
+    background: #c83a30;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  .title { font-size: 18px; font-weight: 500; letter-spacing: 0.08em; color: #f4f4ec; margin: 0; }
+  .subtitle { font-size: 11px; color: #e8584b; letter-spacing: 0.15em; margin: 2px 0 0; }
+  .nav-link {
+    display: inline-block;
+    color: #558ee6;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    margin-bottom: 12px;
+    cursor: pointer;
+  }
+  .nav-link:hover { color: #7daaef; }
+  .section-title {
+    font-size: 12px; letter-spacing: 0.12em; color: #f4f4ec;
+    margin: 0 0 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  button {
+    background: transparent;
+    border: 1px solid #e8ae4b;
+    color: #e8ae4b;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  button:hover { background: rgba(232, 174, 75, 0.08); }
+  button.btn-blue { border-color: #558ee6; color: #558ee6; }
+  button.btn-blue:hover { background: rgba(85, 142, 230, 0.08); }
+  button.btn-green { border-color: #4ad28a; color: #4ad28a; }
+  button.btn-green:hover { background: rgba(74, 210, 138, 0.08); }
+  button.btn-full { width: 100%; padding: 14px; }
+  
+  input.url-input {
+    width: 100%;
+    background: #1a1a1d;
+    border: 1px solid #2a2a2e;
+    color: #e8e8e0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  input.url-input:focus { outline: none; border-color: #e8584b; }
+  
+  /* Stats grid */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+  }
+  .stat-card {
+    background: #0a0a0c;
+    border: 1px solid #1a1a1d;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .stat-label {
+    font-size: 10px;
+    color: #8a8a82;
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-size: 22px;
+    color: #f4f4ec;
+    font-weight: 500;
+  }
+  .stat-sub {
+    font-size: 10px;
+    color: #4ad28a;
+    margin-top: 4px;
+  }
+  .stat-sub.bad { color: #e8584b; }
+  .stat-sub.flat { color: #8a8a82; }
+  
+  /* Table */
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .results-table th {
+    text-align: left;
+    padding: 8px 6px;
+    border-bottom: 1px solid #2a2a2e;
+    color: #8a8a82;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+  }
+  .results-table td {
+    padding: 8px 6px;
+    border-bottom: 1px solid #1a1a1d;
+    color: #e8e8e0;
+  }
+  .results-table tr:hover td { background: #0a0a0c; }
+  .pill {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    letter-spacing: 0.05em;
+  }
+  .pill-w { background: rgba(74, 210, 138, 0.15); color: #4ad28a; }
+  .pill-l { background: rgba(232, 88, 75, 0.15); color: #e8584b; }
+  .pill-p { background: rgba(138, 138, 130, 0.15); color: #8a8a82; }
+  .pill-pending { background: rgba(232, 174, 75, 0.15); color: #e8ae4b; }
+  
+  .status-line {
+    font-size: 10px;
+    color: #8a8a82;
+    margin-top: 8px;
+    letter-spacing: 0.04em;
+    min-height: 14px;
+  }
+  .status-line.success { color: #4ad28a; }
+  .status-line.error { color: #e8584b; }
+  .status-line.loading { color: #e8ae4b; }
+  
+  .scroll-x { overflow-x: auto; }
+  
+  .footer-note {
+    text-align: center;
+    margin-top: 24px;
+    font-size: 10px;
+    color: #4a4a48;
+    letter-spacing: 0.1em;
+  }
+  
+  .row-actions {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .row-actions input {
+    width: 60px;
+    background: #1a1a1d;
+    border: 1px solid #2a2a2e;
+    color: #e8e8e0;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 10px;
+  }
+  .row-actions button {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="card">
+    <div class="header">
+      <div class="logo">📈</div>
+      <div>
+        <p class="title">PERFORMANCE TRACKER</p>
+        <p class="subtitle">DIAMOND EDGE · LIVE LOG</p>
+      </div>
+    </div>
+    <a class="nav-link" onclick="window.location.href='diamond_edge_v5_2.html'">← BACK TO MODEL</a>
+  </div>
+
+  <div class="card card-accent">
+    <p class="section-title">⚙ TRACKER URL (Apps Script Web App)</p>
+    <input type="text" class="url-input" id="tracker_url" placeholder="https://script.google.com/macros/s/.../exec" oninput="saveTrackerUrl()">
+    <div class="status-line" id="url-status">Paste your Apps Script Web App URL — saved in browser.</div>
+    <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+      <button onclick="loadData()">RELOAD</button>
+      <button class="btn-blue" onclick="autoUpdateYesterday()">PULL YESTERDAY'S RESULTS</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="section-title">📊 PERFORMANCE</p>
+    <div class="stat-grid" id="stats">
+      <div class="stat-card"><div class="stat-label">LOGGED</div><div class="stat-value">—</div></div>
+      <div class="stat-card"><div class="stat-label">SETTLED</div><div class="stat-value">—</div></div>
+      <div class="stat-card"><div class="stat-label">ML RECORD</div><div class="stat-value">—</div></div>
+      <div class="stat-card"><div class="stat-label">ML WIN %</div><div class="stat-value">—</div></div>
+      <div class="stat-card"><div class="stat-label">TOTALS RECORD</div><div class="stat-value">—</div></div>
+      <div class="stat-card"><div class="stat-label">TOTALS WIN %</div><div class="stat-value">—</div></div>
+    </div>
+    <div class="status-line" id="data-status"></div>
+  </div>
+
+  <div class="card">
+    <p class="section-title">🗒 PREDICTION LOG</p>
+    <div class="scroll-x">
+      <table class="results-table" id="log-table">
+        <thead>
+          <tr>
+            <th>DATE</th>
+            <th>GAME</th>
+            <th>PICK</th>
+            <th>WIN%</th>
+            <th>TOTAL</th>
+            <th>LINE</th>
+            <th>EDGE</th>
+            <th>RESULT</th>
+            <th>UPDATE</th>
+          </tr>
+        </thead>
+        <tbody id="log-body">
+          <tr><td colspan="9" style="text-align:center; color:#8a8a82; padding:20px;">No data loaded.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer-note">DIAMOND EDGE TRACKER v1.0 · DATA SYNCS TO YOUR GOOGLE SHEET</div>
+</div>
+
+<script>
+let TRACKER_URL = '';
+let CACHED_PREDICTIONS = [];
+
+// Restore saved URL
+try {
+  const saved = localStorage.getItem('de_tracker_url');
+  if (saved) {
+    document.getElementById('tracker_url').value = saved;
+    TRACKER_URL = saved;
+    setStatus('url-status', '✓ URL loaded from browser.', 'success');
+    loadData();
+  }
+} catch (e) { /* localStorage unavailable */ }
+
+function saveTrackerUrl() {
+  TRACKER_URL = document.getElementById('tracker_url').value.trim();
+  try { localStorage.setItem('de_tracker_url', TRACKER_URL); } catch (e) {}
+  setStatus('url-status', '✓ Saved. Click RELOAD to fetch data.', 'success');
+}
+
+function setStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status-line ' + (type || '');
+}
+
+async function loadData() {
+  if (!TRACKER_URL) {
+    setStatus('data-status', 'Set the Tracker URL first.', 'error');
+    return;
+  }
+  
+  setStatus('data-status', 'Fetching predictions...', 'loading');
+  
+  try {
+    const r = await fetch(TRACKER_URL + '?action=fetchAll');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+    
+    CACHED_PREDICTIONS = data.predictions || [];
+    renderStats(data.stats);
+    renderTable(CACHED_PREDICTIONS);
+    setStatus('data-status', '✓ ' + CACHED_PREDICTIONS.length + ' predictions loaded.', 'success');
+  } catch (e) {
+    setStatus('data-status', '✗ Load failed: ' + e.message, 'error');
+  }
+}
+
+function renderStats(s) {
+  const grid = document.getElementById('stats');
+  
+  // Color coding for win %
+  const mlPct = parseFloat(s.mlWinPct);
+  const totalPct = parseFloat(s.totalWinPct);
+  const mlClass = mlPct >= 52.4 ? 'success' : (mlPct === 0 ? 'flat' : 'bad');
+  const totalClass = totalPct >= 52.4 ? 'success' : (totalPct === 0 ? 'flat' : 'bad');
+  
+  grid.innerHTML =
+    '<div class="stat-card"><div class="stat-label">LOGGED</div><div class="stat-value">' + s.totalLogged + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">SETTLED</div><div class="stat-value">' + s.settled + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">ML RECORD</div><div class="stat-value">' + s.mlRecord + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">ML WIN %</div><div class="stat-value">' + s.mlWinPct + '%</div><div class="stat-sub ' + mlClass + '">' + (mlPct >= 52.4 ? '✓ Above breakeven' : (mlPct === 0 ? 'No data yet' : '✗ Below breakeven')) + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">TOTALS RECORD</div><div class="stat-value">' + s.totalRecord + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">TOTALS WIN %</div><div class="stat-value">' + s.totalWinPct + '%</div><div class="stat-sub ' + totalClass + '">' + (totalPct >= 52.4 ? '✓ Above breakeven' : (totalPct === 0 ? 'No data yet' : '✗ Below breakeven')) + '</div></div>';
+}
+
+function renderTable(rows) {
+  const body = document.getElementById('log-body');
+  if (!rows || rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#8a8a82; padding:20px;">No predictions logged yet.</td></tr>';
+    return;
+  }
+  
+  // Most recent first
+  const sorted = [...rows].reverse();
+  
+  body.innerHTML = sorted.map(p => {
+    const date = formatDate(p.gameDate);
+    const game = (p.away || '?') + ' @ ' + (p.home || '?');
+    const pick = p.predictedWinner || '?';
+    const winPct = p.winProb !== '' && p.winProb != null ? p.winProb + '%' : '—';
+    const total = p.predictedTotal || '—';
+    const line = p.totalLine || '—';
+    const edge = p.mlEdge ? p.mlEdge + '%' : '—';
+    const result = renderResult(p.result);
+    const action = p.result ? '' : renderUpdateForm(p.id);
+    
+    return '<tr>' +
+      '<td>' + date + '</td>' +
+      '<td>' + game + '</td>' +
+      '<td>' + pick + '</td>' +
+      '<td>' + winPct + '</td>' +
+      '<td>' + total + '</td>' +
+      '<td>' + line + '</td>' +
+      '<td>' + edge + '</td>' +
+      '<td>' + result + '</td>' +
+      '<td>' + action + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return String(d).substring(0, 10);
+  return (dt.getMonth() + 1) + '/' + dt.getDate();
+}
+
+function renderResult(r) {
+  if (!r) return '<span class="pill pill-pending">PENDING</span>';
+  const m = String(r).match(/ML\s+(\w)/);
+  const t = String(r).match(/Total\s+(\w)/);
+  let html = '';
+  if (m) html += '<span class="pill pill-' + m[1].toLowerCase() + '">ML ' + m[1] + '</span> ';
+  if (t) html += '<span class="pill pill-' + t[1].toLowerCase() + '">T ' + t[1] + '</span>';
+  return html;
+}
+
+function renderUpdateForm(id) {
+  return '<div class="row-actions">' +
+    '<input type="text" id="winner_' + id + '" placeholder="Winner">' +
+    '<input type="number" step="0.5" id="total_' + id + '" placeholder="Total">' +
+    '<button class="btn-green" onclick="submitResult(\'' + id + '\')">SAVE</button>' +
+    '</div>';
+}
+
+async function submitResult(id) {
+  const winner = document.getElementById('winner_' + id).value.trim().toUpperCase();
+  const total = document.getElementById('total_' + id).value.trim();
+  
+  if (!winner) { alert('Enter winner abbreviation (e.g. NYY)'); return; }
+  if (!total) { alert('Enter actual total runs'); return; }
+  
+  try {
+    const params = new URLSearchParams({
+      action: 'updateResult',
+      id: id,
+      actualWinner: winner,
+      actualTotal: total
+    });
+    const r = await fetch(TRACKER_URL + '?' + params.toString());
+    const data = await r.json();
+    if (!data.success) throw new Error(data.error || 'Update failed');
+    setStatus('data-status', '✓ Result saved.', 'success');
+    loadData();
+  } catch (e) {
+    setStatus('data-status', '✗ Save failed: ' + e.message, 'error');
+  }
+}
+
+async function autoUpdateYesterday() {
+  if (!TRACKER_URL) { alert('Set Tracker URL first.'); return; }
+  
+  setStatus('data-status', 'Pulling yesterday\'s MLB results...', 'loading');
+  
+  try {
+    const r = await fetch(TRACKER_URL + '?action=autoUpdateYesterday');
+    const data = await r.json();
+    if (!data.success) throw new Error(data.error || 'Auto-update failed');
+    setStatus('data-status', '✓ Updated ' + data.updated + ' games from yesterday.', 'success');
+    loadData();
+  } catch (e) {
+    setStatus('data-status', '✗ Auto-update failed: ' + e.message, 'error');
+  }
+}
+</script>
+</body>
+</html>
