@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diamond Edge · Tracker V3</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: #08090b; color: #e2e8f0; font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f1218; }
+    ::-webkit-scrollbar-thumb { background: #1d2535; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #263040; }
+    button { font-family: inherit; }
+    @keyframes shimmer { 0%{transform:translateX(-200%)} 100%{transform:translateX(300%)} }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+    .result-drawer { padding: 12px 16px 16px; border-bottom: 1px solid #1d2535; background: #141921; }
+    .result-drawer label { font-size: 10px; font-family: 'IBM Plex Mono', monospace; color: #5a6a82; letter-spacing: 0.08em; display: block; margin-bottom: 4px; }
+    .result-drawer input { background: #08090b; border: 1px solid #1d2535; color: #e2e8f0; padding: 7px 10px; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; width: 100%; }
+    .result-drawer input:focus { outline: none; border-color: #00d68f; }
+
+    @media (max-width: 700px) {
+      .hero-grid { grid-template-columns: 1fr !important; }
+      .hero-center { display: none !important; }
+      .ledger-grid { grid-template-columns: 76px 1fr 80px 60px 70px 36px !important; }
+      .ledger-col-hide { display: none !important; }
+      .nav-links { display: none !important; }
+      .kpi-strip { gap: 12px !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+  <script src="js/config.js"></script>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       DATA LAYER
+       ═══════════════════════════════════════════════════════════════════ -->
+  <script>
+
+  // ── Date helpers ────────────────────────────────────────────────────────────
+  // Normalise any date format → YYYY-MM-DD string
+  function normDate(raw) {
+    if (!raw) return '';
+    // Google Sheets serial (numeric, > 40000)
+    if (typeof raw === 'number' || (/^\d{5}$/.test(String(raw).trim()) && Number(raw) > 40000)) {
+      const n = Number(raw);
+      const d = new Date((n - 25569) * 86400 * 1000);
+      return d.toISOString().slice(0, 10);
+    }
+    const s = String(raw).trim();
+    // Already ISO
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    // JS Date string
+    const d = new Date(s);
+    if (!isNaN(d)) return d.toISOString().slice(0, 10);
+    return s;
+  }
+
+  // "Apr 27" display format
+  function fmtDate(isoStr) {
+    if (!isoStr) return '—';
+    const [y, m, d] = isoStr.split('-').map(Number);
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return (months[m - 1] || '?') + ' ' + d;
+  }
+
+  // ── Odds helpers (American → to-win-1u stake & P/L) ──────────────────────
+  // Returns { risk, profit } where profit = +1u on win, risk = units wagered (loss)
+  function oddsToStake(odds) {
+    if (odds === null || odds === undefined || isNaN(Number(odds))) return { risk: 1.00, noOdds: true };
+    const o = Number(odds);
+    if (o === 0) return { risk: 1.00, noOdds: true };
+    // To win 1u: negative odds → risk |odds|/100u; positive → risk 100/odds u
+    if (o < 0) {
+      return { risk: Math.abs(o) / 100, noOdds: false };
+    } else {
+      return { risk: 100 / o, noOdds: false };
+    }
+  }
+
+  // Parse American odds from a string like "TOR ML -118" or "-118" or "+130"
+  function parseOddsFromStr(str) {
+    if (!str) return null;
+    const m = str.match(/([+-]\d{3,4})/);
+    if (m) return Number(m[1]);
+    return null;
+  }
+
+  // ── Row → Wager objects ─────────────────────────────────────────────────────
+  // One sheet row may produce 1 wager (ML only) or 2 wagers (ML + Total).
+  // Each wager is a self-contained bet object.
+  function rowToWagers(r, idx) {
+    const recML    = (r.recML    || '').trim();
+    const recTotal = (r.recTotal || '').trim();
+    const date     = normDate(r.date || '');
+    const edge     = parseFloat(r.mlEdge) || 0;
+    const winPct   = parseFloat(r.winPct) || 0;
+    const resultStr= (r.result   || '').trim();
+
+    const isPass   = recML.toLowerCase().startsWith('pass');
+    const isFade   = recML.toLowerCase().startsWith('fade') || recML.toLowerCase().startsWith('model disagrees');
+    const isPred   = isPass || isFade;
+
+    // Grade from edge
+    let grade = null;
+    if (!isPred) {
+      if (edge >= 10) grade = 'A';
+      else if (edge >= 5) grade = 'B';
+      else if (edge >= 2) grade = 'C';
+    }
+
+    // ML result from result string
+    let mlResult = null;
+    if (resultStr) {
+      if (/ML\s*W/i.test(resultStr)) mlResult = 'Win';
+      else if (/ML\s*L/i.test(resultStr)) mlResult = 'Loss';
+    }
+
+    // Total result from result string
+    let totalResult = null;
+    if (resultStr) {
+      const tm = resultStr.match(/Total\s+([WLP])/i);
+      if (tm) {
+        const c = tm[1].toUpperCase();
+        if (c === 'W') totalResult = 'Win';
+        else if (c === 'L') totalResult = 'Loss';
+        else if (c === 'P') totalResult = 'Push';
+      }
+    }
+
+    const game = (r.away || '?') + ' @ ' + (r.home || '?');
+    const baseId = r.id || ('row-' + idx);
+
+    // ── ML wager ──────────────────────────────────────────────────────────────
+    let mlWager = null;
+    if (!isPred && recML) {
+      const mlOdds  = r.mlOdds != null ? Number(r.mlOdds) : parseOddsFromStr(recML);
+      const { risk, noOdds } = oddsToStake(mlOdds);
+      const riskRnd = Math.round(risk * 100) / 100;
+      let status = 'Pending';
+      let pl = null;
+      if (mlResult === 'Win')  { status = 'Win';  pl = +1.00; }
+      if (mlResult === 'Loss') { status = 'Loss'; pl = -riskRnd; }
+
+      mlWager = {
+        id:       baseId + '-ml',
+        rowId:    baseId,
+        date,
+        away:     r.away || '',
+        home:     r.home || '',
+        game,
+        betType:  'ML',
+        label:    recML,
+        odds:     mlOdds,
+        edge,
+        winPct,
+        grade,
+        risk:     riskRnd,
+        noOdds,
+        status,
+        pl,
+        projected:   parseFloat(r.predTotal) || null,
+        totalLine:   parseFloat(r.totalLine)  || null,
+        actualWinner:r.actualWinner || null,
+        actualTotal: parseFloat(r.actualTotal) || null,
+        recTotal,
+        notes: '',
+        impliedOdds: winPct ? (100 - winPct).toFixed(1) : null,
+        clv: null,
+        type: 'official',
+      };
+    }
+
+    // ── Total wager ───────────────────────────────────────────────────────────
+    let totWager = null;
+    if (!isPred && recTotal && recTotal !== '—') {
+      const totOdds = r.totOdds != null ? Number(r.totOdds) : parseOddsFromStr(recTotal);
+      const { risk: tRisk, noOdds: tNoOdds } = oddsToStake(totOdds);
+      const tRiskRnd = Math.round(tRisk * 100) / 100;
+      let tStatus = 'Pending';
+      let tPl = null;
+      if (totalResult === 'Win')  { tStatus = 'Win';  tPl = +1.00; }
+      if (totalResult === 'Loss') { tStatus = 'Loss'; tPl = -tRiskRnd; }
+      if (totalResult === 'Push') { tStatus = 'Push'; tPl = 0; }
+
+      totWager = {
+        id:       baseId + '-tot',
+        rowId:    baseId,
+        date,
+        away:     r.away || '',
+        home:     r.home || '',
+        game,
+        betType:  'Total',
+        label:    recTotal,
+        odds:     totOdds,
+        edge:     0,          // Total edge not stored separately yet
+        winPct:   0,
+        grade:    null,
+        risk:     tRiskRnd,
+        noOdds:   tNoOdds,
+        status:   tStatus,
+        pl:       tPl,
+        projected:   parseFloat(r.predTotal) || null,
+        totalLine:   parseFloat(r.totalLine)  || null,
+        actualWinner:r.actualWinner || null,
+        actualTotal: parseFloat(r.actualTotal) || null,
+        recTotal,
+        notes: '',
+        impliedOdds: null,
+        clv: null,
+        type: 'official',
+      };
+    }
+
+    // ── Prediction (pass / fade) — kept for display only, never in metrics ───
+    let predWager = null;
+    if (isPred) {
+      predWager = {
+        id:      baseId + '-pred',
+        rowId:   baseId,
+        date,
+        away:    r.away || '',
+        home:    r.home || '',
+        game,
+        betType: 'Pred',
+        label:   recML,
+        odds:    null, edge: 0, winPct, grade: null,
+        risk: 0, noOdds: true,
+        status:  isPass ? 'Pass' : 'Fade',
+        pl:      null,
+        projected: parseFloat(r.predTotal) || null,
+        totalLine: parseFloat(r.totalLine)  || null,
+        actualWinner: r.actualWinner || null,
+        actualTotal:  parseFloat(r.actualTotal) || null,
+        recTotal,
+        notes: recML,
+        impliedOdds: winPct ? (100 - winPct).toFixed(1) : null,
+        clv: null,
+        type: 'prediction',
+      };
+    }
+
+    return [mlWager, totWager, predWager].filter(Boolean);
+  }
+
+  // ── Equity curve — chronological cumulative P/L from settled wagers only ──
+  function buildEquityCurve(wagers) {
+    const settled = wagers
+      .filter(w => w.type === 'official' && w.pl !== null && w.status !== 'Push')
+      .sort((a, b) => a.date.localeCompare(b.date));
+    let running = 0;
+    const pts = [];
+    settled.forEach(w => {
+      running = Math.round((running + w.pl) * 100) / 100;
+      pts.push({ date: w.date, units: running });
+    });
+    if (pts.length === 0) {
+      const today = new Date().toISOString().slice(0, 10);
+      return [{ date: today, units: 0 }, { date: today, units: 0 }];
+    }
+    if (pts.length === 1) pts.unshift({ date: pts[0].date, units: 0 });
+    return pts;
+  }
+
+  // ── Analytics — from settled wagers only ──────────────────────────────────
+  function buildAnalytics(wagers) {
+    const official = wagers.filter(w => w.type === 'official');
+    const settled  = official.filter(w => w.status === 'Win' || w.status === 'Loss');
+    const wins     = settled.filter(w => w.status === 'Win');
+
+    // Net units = sum of P/L on settled wagers (win +1u, loss -riskRnd)
+    const netUnits   = Math.round(settled.reduce((s, w) => s + (w.pl || 0), 0) * 100) / 100;
+    // Total units risked = sum of risk on settled wagers
+    const totalRisked = Math.round(settled.reduce((s, w) => s + w.risk, 0) * 100) / 100;
+    const roi        = totalRisked ? Math.round(netUnits / totalRisked * 1000) / 10 : 0;
+    const winRate    = settled.length ? Math.round(wins.length / settled.length * 1000) / 10 : 0;
+    const avgEdge    = official.filter(w => w.betType === 'ML').length
+      ? Math.round(official.filter(w => w.betType === 'ML').reduce((s, w) => s + w.edge, 0) / official.filter(w => w.betType === 'ML').length * 10) / 10
+      : 0;
+
+    // Market-level breakdown
+    const mlSettled  = settled.filter(w => w.betType === 'ML');
+    const mlWins     = mlSettled.filter(w => w.status === 'Win');
+    const mlNetU     = Math.round(mlSettled.reduce((s, w) => s + (w.pl || 0), 0) * 100) / 100;
+    const mlRisked   = mlSettled.reduce((s, w) => s + w.risk, 0);
+    const mlROI      = mlRisked ? Math.round(mlNetU / mlRisked * 1000) / 10 : 0;
+
+    const totSettled = settled.filter(w => w.betType === 'Total');
+    const totWins    = totSettled.filter(w => w.status === 'Win');
+    const totNetU    = Math.round(totSettled.reduce((s, w) => s + (w.pl || 0), 0) * 100) / 100;
+    const totRisked  = totSettled.reduce((s, w) => s + w.risk, 0);
+    const totROI     = totRisked ? Math.round(totNetU / totRisked * 1000) / 10 : 0;
+
+    // Grade breakdown (ML wagers only, edge-graded)
+    const gradeStats = {};
+    ['A','B','C'].forEach(g => {
+      const gp   = settled.filter(w => w.grade === g);
+      const gw   = gp.filter(w => w.status === 'Win');
+      const totSt= gp.reduce((s, w) => s + w.risk, 0);
+      const totPL= gp.reduce((s, w) => s + (w.pl || 0), 0);
+      gradeStats[g] = {
+        w:       gw.length,
+        l:       gp.length - gw.length,
+        roi:     totSt ? Math.round(totPL / totSt * 1000) / 10 : 0,
+        avg_edge:gp.length ? Math.round(gp.reduce((s, w) => s + w.edge, 0) / gp.length * 10) / 10 : 0
+      };
+    });
+
+    // Streak
+    let streak = { type: 'W', count: 0 };
+    const recent = [...settled].sort((a, b) => b.date.localeCompare(a.date));
+    if (recent.length) {
+      streak.type = recent[0].status === 'Win' ? 'W' : 'L';
+      for (const r of recent) {
+        if (r.status === (streak.type === 'W' ? 'Win' : 'Loss')) streak.count++;
+        else break;
+      }
+    }
+
+    // Peak & max drawdown
+    let running = 0, peak = 0, maxDD = 0;
+    [...settled].sort((a, b) => a.date.localeCompare(b.date)).forEach(w => {
+      running += w.pl || 0;
+      if (running > peak) peak = running;
+      const dd = peak - running;
+      if (dd > maxDD) maxDD = dd;
+    });
+
+    const anyNoOdds = settled.some(w => w.noOdds);
+
+    return {
+      netUnits,
+      roi,
+      winRate,
+      avgEdge,
+      betsTracked: settled.length,
+      totalRisked,
+      clv:        null,  // placeholder — requires closing line data
+      peakUnits:  Math.round(peak  * 100) / 100,
+      maxDrawdown:-Math.round(maxDD * 100) / 100,
+      streak,
+      record: { w: wins.length, l: settled.length - wins.length },
+      markets: {
+        ml:     { w: mlWins.length,  l: mlSettled.length  - mlWins.length,  roi: mlROI,  net: mlNetU  },
+        totals: { w: totWins.length, l: totSettled.length - totWins.length, roi: totROI, net: totNetU },
+      },
+      grades: gradeStats,
+      anyNoOdds,
+    };
+  }
+
+  // ── Main fetch ─────────────────────────────────────────────────────────────
+  window.DE_loadData = async function() {
+    const url = (typeof HARDCODED_TRACKER_URL !== 'undefined' ? HARDCODED_TRACKER_URL : '');
+    if (!url) return null;
+    try {
+      const res = await fetch(url + '?action=read');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'API error');
+
+      const raw    = data.rows || [];
+      // Explode each row into wager objects
+      const wagers = raw.flatMap((r, i) => rowToWagers(r, i));
+      const sorted = [...wagers].sort((a, b) => b.date.localeCompare(a.date));
+
+      const today      = new Date().toISOString().slice(0, 10);
+      const todayWagers= sorted.filter(w => w.date === today);
+
+      const equityCurve = buildEquityCurve(wagers);
+      const analytics   = buildAnalytics(wagers);
+
+      // Best bet = highest-edge pending ML wager today
+      const bestBet = sorted
+        .filter(w => w.date === today && w.betType === 'ML' && w.type === 'official' && w.status === 'Pending')
+        .sort((a, b) => b.edge - a.edge)[0] || null;
+
+      return {
+        equityCurve,
+        todayWagers: todayWagers.length ? todayWagers : sorted.slice(0, 6),
+        allWagers: sorted,
+        analytics,
+        bestBet,
+        totalRows: wagers.filter(w => w.type === 'official').length,
+        lastUpdated: new Date().toLocaleTimeString(),
+      };
+    } catch (err) {
+      console.warn('[DE V3] Load failed:', err.message);
+      return null;
+    }
+  };
+
+  // ── Save result ────────────────────────────────────────────────────────────
+  window.DE_saveResult = async function(rowId, winner, actualTotal, allWagers) {
+    const url = (typeof HARDCODED_TRACKER_URL !== 'undefined' ? HARDCODED_TRACKER_URL : '');
+    if (!url) throw new Error('Tracker URL not configured');
+
+    // Find any wager from this row to get recTotal / totalLine
+    const ref = allWagers ? allWagers.find(w => w.rowId === rowId) : null;
+    let mlGrade = null, totalGrade = null;
+
+    if (ref) {
+      if (ref.away && winner) {
+        // Check if winner matches away or home
+        const w = winner.trim().toUpperCase();
+        const a = (ref.away || '').trim().toUpperCase();
+        const h = (ref.home || '').trim().toUpperCase();
+        mlGrade = (w === a || w === h) ? (w === a ? 'W' : 'W') : 'L';
+        // More precise: compare to the pick side
+        if (ref.label) {
+          const lbl = ref.label.toUpperCase();
+          const pickedTeam = lbl.includes(a) ? a : lbl.includes(h) ? h : null;
+          if (pickedTeam) mlGrade = w === pickedTeam ? 'W' : 'L';
+        }
+      }
+      if (ref.recTotal && ref.totalLine != null && actualTotal != null) {
+        const line   = parseFloat(ref.totalLine);
+        const actual = parseFloat(actualTotal);
+        if (!isNaN(line) && !isNaN(actual)) {
+          const rt = ref.recTotal.toUpperCase();
+          if (rt.startsWith('OVER'))  totalGrade = actual > line ? 'W' : actual === line ? 'P' : 'L';
+          if (rt.startsWith('UNDER')) totalGrade = actual < line ? 'W' : actual === line ? 'P' : 'L';
+        }
+      }
+    }
+
+    const resultStr = 'ML ' + (mlGrade || '?') + ' / Total ' + (totalGrade || '-');
+    const fields = { actualWinner: winner, actualTotal, result: resultStr };
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'update', id: rowId, fields })
+    });
+    const d = await res.json();
+    if (!d.success) throw new Error(d.error || 'Save failed');
+    return resultStr;
+  };
+
+  // ── Formatters ─────────────────────────────────────────────────────────────
+  window.fmt = {
+    date:  fmtDate,
+    odds:  (o) => o === null || o === undefined ? '—' : (o > 0 ? '+' + o : '' + o),
+    pl:    (v) => v === null ? '—' : (v >= 0 ? '+' + v.toFixed(2) + 'u' : v.toFixed(2) + 'u'),
+    risk:  (v) => v > 0 ? v.toFixed(2) + 'u risk' : '—',
+    units: (u) => u >= 0 ? '+' + u.toFixed(1) + 'u' : u.toFixed(1) + 'u',
+    pct:   (p) => (p >= 0 ? '+' : '') + p.toFixed(1) + '%',
+  };
+
+  </script>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       COMPONENTS + APP
+       ═══════════════════════════════════════════════════════════════════ -->
+  <script type="text/babel">
+
+  // ── Design tokens ──────────────────────────────────────────────────────────
+  const C = {
+    bg:       '#08090b',
+    surface:  '#0f1218',
+    surface2: '#141921',
+    border:   '#1d2535',
+    border2:  '#263040',
+    accent:   '#00d68f',
+    accentDim:'#00d68f22',
+    text:     '#e2e8f0',
+    label:    '#5a6a82',
+    muted:    '#2c3b4e',
+    gain:     '#00d68f',
+    loss:     '#f43f5e',
+    warn:     '#f59e0b',
+    gradeA:   '#00d68f',
+    gradeB:   '#60a5fa',
+    gradeC:   '#f59e0b',
+    mlColor:  '#818cf8',
+    totColor: '#fb923c',
+  };
+
+  // ── DiamondLogo ────────────────────────────────────────────────────────────
+  function DiamondLogo({ size = 22 }) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <polygon points="12,2 22,9 12,22 2,9" fill={C.accent} opacity="0.12" stroke={C.accent} strokeWidth="1.5" strokeLinejoin="round"/>
+        <polygon points="12,5 19,10 12,19 5,10" fill={C.accent} opacity="0.3"/>
+        <polygon points="12,8 16,11 12,16 8,11" fill={C.accent}/>
+      </svg>
+    );
+  }
+
+  // ── BetTypeBadge ───────────────────────────────────────────────────────────
+  function BetTypeBadge({ type }) {
+    const map = { ML: { color: C.mlColor, label: 'ML' }, Total: { color: C.totColor, label: 'TOT' }, Pred: { color: C.label, label: 'PRED' } };
+    const s = map[type] || map.Pred;
+    return (
+      <span style={{
+        padding:'1px 6px', borderRadius:3, fontSize:9, fontWeight:700,
+        fontFamily:'IBM Plex Mono', letterSpacing:'0.08em',
+        background: s.color + '18', color: s.color,
+        border:`1px solid ${s.color}30`
+      }}>{s.label}</span>
+    );
+  }
+
+  // ── GradeBadge ─────────────────────────────────────────────────────────────
+  function GradeBadge({ grade }) {
+    if (!grade) return <span style={{ color: C.muted, fontFamily: 'IBM Plex Mono' }}>—</span>;
+    const color = { A: C.gradeA, B: C.gradeB, C: C.gradeC }[grade] || C.muted;
+    return (
+      <span style={{
+        display:'inline-flex', alignItems:'center', justifyContent:'center',
+        width:22, height:22, borderRadius:4,
+        background: color+'22', border:`1px solid ${color}55`,
+        color, fontSize:11, fontWeight:700, fontFamily:'IBM Plex Mono'
+      }}>{grade}</span>
+    );
+  }
+
+  // ── StatusPill ─────────────────────────────────────────────────────────────
+  function StatusPill({ status }) {
+    const map = {
+      Pending: { bg:'#1d2535', color:'#94a3b8', label:'● PENDING' },
+      Win:     { bg:C.gain+'18', color:C.gain,  label:'▲ WIN'     },
+      Loss:    { bg:C.loss+'18', color:C.loss,  label:'▼ LOSS'    },
+      Push:    { bg:'#1d2535',   color:C.warn,  label:'= PUSH'    },
+      Pass:    { bg:'#1d2535',   color:C.label, label:'— PASS'    },
+      Fade:    { bg:'#1d2535',   color:C.label, label:'↩ FADE'    },
+    };
+    const s = map[status] || map.Pending;
+    return (
+      <span style={{
+        padding:'2px 8px', borderRadius:20, fontSize:10, fontWeight:700,
+        fontFamily:'IBM Plex Mono', letterSpacing:'0.08em',
+        background:s.bg, color:s.color,
+        border:`1px solid ${s.color}30`, whiteSpace:'nowrap'
+      }}>{s.label}</span>
+    );
+  }
+
+  // ── Sparkline ──────────────────────────────────────────────────────────────
+  function Sparkline({ data, width = 200, height = 48 }) {
+    if (!data || data.length < 2) return null;
+    const values = data.map(d => d.units);
+    const min    = Math.min(...values);
+    const max    = Math.max(...values);
+    const range  = max - min || 1;
+    const pts    = values.map((v, i) => {
+      const x = (i / (values.length - 1)) * width;
+      const y = height - ((v - min) / range) * height;
+      return `${x},${y}`;
+    });
+    const area  = `0,${height} ${pts.join(' ')} ${width},${height}`;
+    const last  = pts[pts.length - 1].split(',');
+    const final = values[values.length - 1];
+    const col   = final >= 0 ? C.gain : C.loss;
+    return (
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow:'visible' }}>
+        <defs>
+          <linearGradient id="spkGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={col} stopOpacity="0.25"/>
+            <stop offset="100%" stopColor={col} stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        <polygon points={area} fill="url(#spkGrad)"/>
+        <polyline points={pts.join(' ')} fill="none" stroke={col} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/>
+        <circle cx={last[0]} cy={last[1]} r="3" fill={col}/>
+      </svg>
+    );
+  }
+
+  // ── EquityChart ────────────────────────────────────────────────────────────
+  function EquityChart({ data, range }) {
+    const [hovIdx, setHovIdx] = React.useState(null);
+    const W = 800, H = 200;
+    const now = new Date();
+
+    const filtered = (data || []).filter(d => {
+      const dt = new Date(d.date);
+      if (range === '7d')  return (now - dt) <= 7  * 86400000;
+      if (range === '30d') return (now - dt) <= 30 * 86400000;
+      if (range === '90d') return (now - dt) <= 90 * 86400000;
+      return true;
+    });
+
+    if (filtered.length < 2) {
+      return (
+        <div style={{ height:200, display:'flex', alignItems:'center', justifyContent:'center', color:C.label, fontFamily:'IBM Plex Mono', fontSize:12 }}>
+          Not enough data for this range
+        </div>
+      );
+    }
+
+    const values = filtered.map(d => d.units);
+    const minV   = Math.min(...values) - 0.5;
+    const maxV   = Math.max(...values) + 0.5;
+    const rng    = maxV - minV || 1;
+    const toX    = i => (i / (filtered.length - 1)) * W;
+    const toY    = v => H - ((v - minV) / rng) * H;
+    const pts    = filtered.map((d, i) => `${toX(i)},${toY(d.units)}`).join(' ');
+    const area   = `0,${H} ${pts} ${W},${H}`;
+    const zeroY  = toY(0);
+
+    let peakIdx = 0, peakVal = -Infinity;
+    values.forEach((v, i) => { if (v > peakVal) { peakVal = v; peakIdx = i; } });
+
+    const finalUnits = values[values.length - 1];
+    const lineColor  = finalUnits >= 0 ? C.gain : C.loss;
+    const hov        = hovIdx !== null ? filtered[hovIdx] : null;
+
+    return (
+      <div style={{ position:'relative', width:'100%' }}>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          style={{ width:'100%', height:200, display:'block', cursor:'crosshair' }}
+          onMouseMove={e => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width * W;
+            const idx = Math.round(x / W * (filtered.length - 1));
+            setHovIdx(Math.max(0, Math.min(filtered.length - 1, idx)));
+          }}
+          onMouseLeave={() => setHovIdx(null)}
+        >
+          <defs>
+            <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={lineColor} stopOpacity="0.18"/>
+              <stop offset="100%" stopColor={lineColor} stopOpacity="0"/>
+            </linearGradient>
+            <linearGradient id="eqLine" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor={lineColor} stopOpacity="0.3"/>
+              <stop offset="100%" stopColor={lineColor}/>
+            </linearGradient>
+          </defs>
+          {/* Grid lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map(t => (
+            <line key={t} x1={0} y1={H * t} x2={W} y2={H * t} stroke={C.border} strokeWidth="0.5" strokeDasharray="4 4"/>
+          ))}
+          {/* Zero line */}
+          {zeroY > 0 && zeroY < H && (
+            <line x1={0} y1={zeroY} x2={W} y2={zeroY} stroke={C.border2} strokeWidth="1" strokeDasharray="6 3" opacity="0.7"/>
+          )}
+          <polygon points={area} fill="url(#eqGrad)"/>
+          <polyline points={pts} fill="none" stroke="url(#eqLine)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+          {/* Peak dot */}
+          <circle cx={toX(peakIdx)} cy={toY(peakVal)} r="4" fill={C.accent} opacity="0.9"/>
+          <text x={toX(peakIdx)} y={toY(peakVal) - 10} textAnchor="middle" fill={C.accent} fontSize="9" fontFamily="IBM Plex Mono" opacity="0.8">
+            PEAK {peakVal >= 0 ? '+' : ''}{peakVal.toFixed(1)}u
+          </text>
+          {hovIdx !== null && (
+            <>
+              <line x1={toX(hovIdx)} y1={0} x2={toX(hovIdx)} y2={H} stroke={C.border2} strokeWidth="1" strokeDasharray="3 3"/>
+              <circle cx={toX(hovIdx)} cy={toY(filtered[hovIdx].units)} r="4" fill={C.accent} stroke={C.bg} strokeWidth="2"/>
+            </>
+          )}
+        </svg>
+        {hov && (
+          <div style={{
+            position:'absolute', top:8, right:8,
+            background:C.surface2, border:`1px solid ${C.border}`,
+            borderRadius:8, padding:'8px 12px',
+            fontFamily:'IBM Plex Mono', fontSize:11, color:C.text,
+            pointerEvents:'none'
+          }}>
+            <div style={{ color:C.label, marginBottom:2 }}>{window.fmt.date(hov.date)}</div>
+            <div style={{ color:hov.units >= 0 ? C.gain : C.loss, fontWeight:700, fontSize:14 }}>
+              {hov.units >= 0 ? '+' : ''}{hov.units.toFixed(2)}u
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── WagerCard (replaces PickCardSlip) ─────────────────────────────────────
+  function WagerCard({ wager, expanded, onToggle }) {
+    const isPred = wager.type === 'prediction';
+    const statusColor = wager.status === 'Win' ? C.gain : wager.status === 'Loss' ? C.loss : wager.status === 'Pending' ? C.accent : C.label;
+    return (
+      <div onClick={onToggle} style={{
+        background:C.surface,
+        border:`1px solid ${expanded ? C.accent + '55' : C.border}`,
+        borderRadius:12, padding:'14px 18px', cursor:'pointer',
+        boxShadow: expanded ? `0 0 0 1px ${C.accent}18, 0 8px 24px #00000040` : '0 2px 8px #00000028',
+        position:'relative', overflow:'hidden'
+      }}>
+        {/* Left accent bar */}
+        <div style={{ position:'absolute', left:0, top:0, bottom:0, width:3,
+          background: isPred ? C.muted : statusColor,
+          borderRadius:'12px 0 0 12px' }}/>
+        <div style={{ paddingLeft:8 }}>
+          {/* Top row */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+                <BetTypeBadge type={wager.betType}/>
+                <span style={{ fontFamily:'IBM Plex Mono', fontSize:10, color:C.label, letterSpacing:'0.08em' }}>
+                  MLB · {window.fmt.date(wager.date)}
+                </span>
+              </div>
+              <div style={{ fontWeight:700, fontSize:15, color:C.text }}>
+                {wager.away} <span style={{ color:C.label }}>@</span> {wager.home}
+              </div>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              {wager.grade && <GradeBadge grade={wager.grade}/>}
+              <StatusPill status={wager.status}/>
+            </div>
+          </div>
+          {/* Bet details row */}
+          <div style={{ display:'flex', gap:20, flexWrap:'wrap', alignItems:'center' }}>
+            <div>
+              <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', marginBottom:3, letterSpacing:'0.08em' }}>BET</div>
+              <div style={{ fontSize:14, fontWeight:600, color:C.text }}>{wager.label}</div>
+            </div>
+            {!isPred && <>
+              <div style={{ width:1, background:C.border, alignSelf:'stretch', margin:'2px 0' }}/>
+              {wager.odds && (
+                <div>
+                  <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', marginBottom:3, letterSpacing:'0.08em' }}>ODDS</div>
+                  <div style={{ fontSize:13, fontWeight:600, color:C.text, fontFamily:'IBM Plex Mono' }}>{window.fmt.odds(wager.odds)}</div>
+                </div>
+              )}
+              {wager.betType === 'ML' && wager.edge > 0 && <>
+                <div style={{ width:1, background:C.border, alignSelf:'stretch', margin:'2px 0' }}/>
+                <div>
+                  <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', marginBottom:3, letterSpacing:'0.08em' }}>EDGE</div>
+                  <div style={{ fontSize:13, fontWeight:600, color:wager.edge >= 5 ? C.gain : C.warn, fontFamily:'IBM Plex Mono' }}>
+                    +{wager.edge}%
+                  </div>
+                </div>
+              </>}
+              <div style={{ width:1, background:C.border, alignSelf:'stretch', margin:'2px 0' }}/>
+              <div>
+                <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', marginBottom:3, letterSpacing:'0.08em' }}>RISK</div>
+                <div style={{ fontSize:13, fontWeight:600, color:C.text, fontFamily:'IBM Plex Mono' }}>
+                  {wager.noOdds ? '1.00u*' : wager.risk.toFixed(2) + 'u'}
+                </div>
+              </div>
+              <div style={{ width:1, background:C.border, alignSelf:'stretch', margin:'2px 0' }}/>
+              <div>
+                <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', marginBottom:3, letterSpacing:'0.08em' }}>P/L</div>
+                <div style={{ fontSize:13, fontWeight:700, fontFamily:'IBM Plex Mono',
+                  color: wager.pl === null ? C.label : wager.pl > 0 ? C.gain : wager.pl < 0 ? C.loss : C.warn }}>
+                  {window.fmt.pl(wager.pl)}
+                </div>
+              </div>
+            </>}
+            {isPred && (
+              <div style={{ color:C.label, fontFamily:'IBM Plex Mono', fontSize:11 }}>
+                Not tracked in bankroll
+              </div>
+            )}
+          </div>
+          {/* Expanded detail */}
+          {expanded && (
+            <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${C.border}`,
+              display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))', gap:10 }}>
+              {wager.betType === 'ML' && wager.winPct > 0 && <StatMini label="MODEL WIN%" value={wager.winPct + '%'}/>}
+              {wager.impliedOdds && <StatMini label="IMPLIED WIN%" value={wager.impliedOdds + '%'}/>}
+              {wager.projected   && <StatMini label="PROJ TOTAL"   value={wager.projected}/>}
+              {wager.totalLine   && <StatMini label="TOTAL LINE"   value={wager.totalLine}/>}
+              {wager.actualWinner&& <StatMini label="WINNER"       value={wager.actualWinner} color={C.text}/>}
+              {wager.actualTotal && <StatMini label="ACTUAL TOTAL" value={wager.actualTotal}/>}
+              {wager.noOdds && (
+                <div style={{ gridColumn:'1/-1', fontFamily:'IBM Plex Mono', fontSize:10, color:C.warn, opacity:.8 }}>
+                  * No odds in sheet — using flat 1u risk
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Small helpers ──────────────────────────────────────────────────────────
+  function StatMini({ label, value, color }) {
+    return (
+      <div>
+        <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.08em', marginBottom:2 }}>{label}</div>
+        <div style={{ fontSize:12, fontWeight:700, color:color || C.text, fontFamily:'IBM Plex Mono' }}>{value}</div>
+      </div>
+    );
+  }
+
+  function SegControl({ options, value, onChange, small }) {
+    return (
+      <div style={{ display:'flex', background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:2, gap:1 }}>
+        {options.map(o => (
+          <button key={o} onClick={() => onChange(o)} style={{
+            background: value === o ? C.surface2 : 'transparent',
+            border:     value === o ? `1px solid ${C.border2}` : '1px solid transparent',
+            color:      value === o ? C.text : C.label,
+            borderRadius:6, padding: small ? '4px 10px' : '6px 14px',
+            fontSize: small ? 11 : 12, cursor:'pointer',
+            fontFamily:"'Inter', sans-serif", whiteSpace:'nowrap'
+          }}>{o}</button>
+        ))}
+      </div>
+    );
+  }
+
+  function Toggle({ value, onChange }) {
+    return (
+      <div onClick={() => onChange(!value)} style={{
+        width:36, height:20, borderRadius:10, cursor:'pointer',
+        background: value ? C.accent : C.border2, position:'relative', flexShrink:0
+      }}>
+        <div style={{
+          position:'absolute', top:2, left: value ? 18 : 2,
+          width:16, height:16, borderRadius:'50%', background:'#fff',
+          transition:'left 0.18s', boxShadow:'0 1px 3px #0005'
+        }}/>
+      </div>
+    );
+  }
+
+  function SectionHeader({ title, count, extra }) {
+    return (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14, flexWrap:'wrap', gap:8 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <h2 style={{ margin:0, fontSize:15, fontWeight:700, color:C.text }}>{title}</h2>
+          {count !== undefined && (
+            <span style={{ fontSize:10, fontFamily:'IBM Plex Mono', color:C.accent,
+              background:C.accent+'18', border:`1px solid ${C.accent}33`,
+              borderRadius:20, padding:'2px 8px' }}>{count}</span>
+          )}
+        </div>
+        {extra}
+      </div>
+    );
+  }
+
+  // ── KPI Card ───────────────────────────────────────────────────────────────
+  function KpiCard({ label, value, sub, color, size = 'md' }) {
+    const fs = size === 'lg' ? 36 : size === 'sm' ? 16 : 22;
+    return (
+      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+        <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.12em' }}>{label}</div>
+        <div style={{ fontSize:fs, fontWeight:800, color: color || C.text, fontFamily:'IBM Plex Mono', lineHeight:1 }}>{value}</div>
+        {sub && <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', marginTop:1 }}>{sub}</div>}
+      </div>
+    );
+  }
+
+  // ── Analytics panels ───────────────────────────────────────────────────────
+  function AnalyticsPerformance({ a }) {
+    const cards = [
+      { label:'Net Units',    value: (a.netUnits >= 0 ? '+' : '') + a.netUnits + 'u',       color: a.netUnits >= 0 ? C.gain : C.loss },
+      { label:'ROI',          value: (a.roi >= 0 ? '+' : '') + a.roi + '%',                  color: a.roi >= 0 ? C.gain : C.loss },
+      { label:'Win Rate',     value: a.winRate + '%',                                         color: a.winRate >= 52.4 ? C.gain : C.text },
+      { label:'Bets Tracked', value: '' + a.betsTracked,                                      color: C.text },
+      { label:'Avg Edge (ML)',value: '+' + a.avgEdge + '%',                                   color: C.gain },
+      { label:'CLV%',         value: '—',                                                     color: C.label, note:'Requires closing line data' },
+      { label:'Peak Units',   value: (a.peakUnits >= 0 ? '+' : '') + a.peakUnits + 'u',      color: C.gain },
+      { label:'Max Drawdown', value: a.maxDrawdown + 'u',                                     color: C.loss },
+    ];
+    return (
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(165px,1fr))', gap:12 }}>
+        {cards.map(r => (
+          <div key={r.label} style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:'14px 16px' }}>
+            <div style={{ fontSize:10, color:C.label, fontFamily:'IBM Plex Mono', marginBottom:6, letterSpacing:'0.08em' }}>{r.label}</div>
+            <div style={{ fontSize:20, fontWeight:700, color:r.color, fontFamily:'IBM Plex Mono' }}>{r.value}</div>
+            {r.note && <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', marginTop:4, opacity:.7 }}>{r.note}</div>}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function AnalyticsMarkets({ a }) {
+    const rows = [
+      { label:'Moneyline', color:C.mlColor,  ...a.markets.ml },
+      { label:'Totals',    color:C.totColor, ...a.markets.totals },
+    ];
+    return (
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:12 }}>
+        {rows.map(r => (
+          <div key={r.label} style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:18 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+              <div style={{ width:3, height:16, borderRadius:2, background:r.color }}/>
+              <div style={{ fontSize:11, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.08em' }}>{r.label.toUpperCase()}</div>
+            </div>
+            <div style={{ fontFamily:'IBM Plex Mono', marginBottom:8 }}>
+              <span style={{ fontSize:24, fontWeight:700, color:C.text }}>{r.w}</span>
+              <span style={{ fontSize:16, color:C.label, margin:'0 4px' }}>-</span>
+              <span style={{ fontSize:24, fontWeight:700, color:C.text }}>{r.l}</span>
+            </div>
+            <div style={{ display:'flex', gap:16 }}>
+              <div>
+                <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.08em', marginBottom:2 }}>ROI</div>
+                <div style={{ fontSize:14, fontWeight:700, color:r.roi > 0 ? C.gain : r.roi < 0 ? C.loss : C.label, fontFamily:'IBM Plex Mono' }}>
+                  {r.roi > 0 ? '+' : ''}{r.roi}%
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.08em', marginBottom:2 }}>NET U</div>
+                <div style={{ fontSize:14, fontWeight:700, color:r.net > 0 ? C.gain : r.net < 0 ? C.loss : C.label, fontFamily:'IBM Plex Mono' }}>
+                  {r.net > 0 ? '+' : ''}{r.net}u
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {/* CLV placeholder */}
+        <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:18, opacity:.5 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+            <div style={{ width:3, height:16, borderRadius:2, background:C.label }}/>
+            <div style={{ fontSize:11, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.08em' }}>CLV</div>
+          </div>
+          <div style={{ fontFamily:'IBM Plex Mono', fontSize:13, color:C.label, marginBottom:4 }}>—</div>
+          <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', opacity:.8 }}>Requires closing line feed</div>
+        </div>
+      </div>
+    );
+  }
+
+  function AnalyticsGrades({ a }) {
+    return (
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        {Object.entries(a.grades).map(([g, d]) => {
+          const color = { A:C.gradeA, B:C.gradeB, C:C.gradeC }[g];
+          const total = d.w + d.l;
+          const pct   = total ? Math.round(d.w / total * 100) : 0;
+          return (
+            <div key={g} style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:'14px 16px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:8 }}>
+                <GradeBadge grade={g}/>
+                <span style={{ fontFamily:'IBM Plex Mono', color:C.text }}>{d.w}-{d.l} ({pct}%)</span>
+                <span style={{ fontFamily:'IBM Plex Mono', color:d.roi > 0 ? C.gain : d.roi < 0 ? C.loss : C.label, marginLeft:'auto' }}>
+                  ROI {d.roi > 0 ? '+' : ''}{d.roi}%
+                </span>
+                <span style={{ fontFamily:'IBM Plex Mono', color:C.label, fontSize:11 }}>Avg Edge +{d.avg_edge}%</span>
+              </div>
+              <div style={{ background:C.border, borderRadius:3, height:3, overflow:'hidden' }}>
+                <div style={{ width: pct + '%', height:'100%', background:color, borderRadius:3, transition:'width 0.5s ease' }}/>
+              </div>
+            </div>
+          );
+        })}
+        <div style={{ fontFamily:'IBM Plex Mono', fontSize:10, color:C.label, marginTop:4, opacity:.7 }}>
+          Grade A ≥10% edge · Grade B ≥5% · Grade C ≥2%
+        </div>
+      </div>
+    );
+  }
+
+  // ── Result Entry ───────────────────────────────────────────────────────────
+  function ResultEntryRow({ rowId, wager, allWagers, onSaved }) {
+    const [winner, setWinner] = React.useState('');
+    const [total,  setTotal]  = React.useState('');
+    const [saving, setSaving] = React.useState(false);
+    const [msg,    setMsg]    = React.useState('');
+
+    async function handleSave() {
+      if (!winner) { setMsg('Enter winner abbreviation'); return; }
+      setSaving(true); setMsg('Saving…');
+      try {
+        const result = await window.DE_saveResult(rowId, winner.toUpperCase(), total ? parseFloat(total) : null, allWagers);
+        setMsg('✓ ' + result);
+        setTimeout(() => onSaved && onSaved(), 800);
+      } catch(e) {
+        setMsg('✗ ' + e.message);
+        setSaving(false);
+      }
+    }
+
+    return (
+      <div style={{ padding:'12px 16px 14px', borderBottom:`1px solid ${C.border}`,
+        background:C.surface2, display:'flex', gap:10, alignItems:'flex-end', flexWrap:'wrap' }}>
+        <div>
+          <label style={{ fontSize:10, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.08em', display:'block', marginBottom:4 }}>WINNER</label>
+          <input value={winner} onChange={e => setWinner(e.target.value.toUpperCase())} placeholder="NYY"
+            style={{ background:C.bg, border:`1px solid ${C.border}`, color:C.text,
+              padding:'7px 10px', borderRadius:6, fontFamily:'IBM Plex Mono', fontSize:12, width:90 }}/>
+        </div>
+        <div>
+          <label style={{ fontSize:10, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.08em', display:'block', marginBottom:4 }}>ACTUAL TOTAL</label>
+          <input value={total} onChange={e => setTotal(e.target.value)} placeholder="9" type="number" step="0.5"
+            style={{ background:C.bg, border:`1px solid ${C.border}`, color:C.text,
+              padding:'7px 10px', borderRadius:6, fontFamily:'IBM Plex Mono', fontSize:12, width:90 }}/>
+        </div>
+        <button onClick={handleSave} disabled={saving} style={{
+          background:C.accent, color:'#000', border:'none', padding:'8px 14px',
+          borderRadius:6, fontWeight:700, fontSize:12, cursor:saving ? 'not-allowed' : 'pointer',
+          fontFamily:'IBM Plex Mono', opacity:saving ? 0.6 : 1
+        }}>Save</button>
+        {msg && <span style={{ fontFamily:'IBM Plex Mono', fontSize:11,
+          color: msg.startsWith('✓') ? C.gain : msg.startsWith('✗') ? C.loss : C.warn }}>{msg}</span>}
+      </div>
+    );
+  }
+
+  // ── AutoCheckBtn ───────────────────────────────────────────────────────────
+  function AutoCheckBtn({ onRefresh }) {
+    const [status,  setStatus]  = React.useState('');
+    const [running, setRunning] = React.useState(false);
+
+    async function check() {
+      const url = (typeof HARDCODED_TRACKER_URL !== 'undefined' ? HARDCODED_TRACKER_URL : '');
+      if (!url) return;
+      setRunning(true); setStatus('Checking…');
+      try {
+        const r = await fetch(url + '?action=checkAllPending');
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || 'Failed');
+        const m = d.updated > 0 ? '✓ Updated ' + d.updated : '✓ No new finals';
+        setStatus(m);
+        if (d.updated > 0 && onRefresh) onRefresh();
+      } catch(e) {
+        setStatus('✗ ' + e.message);
+      } finally {
+        setRunning(false);
+      }
+    }
+
+    return (
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <button onClick={check} disabled={running} style={{
+          background:C.surface2, border:`1px solid ${C.accent}55`, color:C.accent,
+          padding:'6px 12px', borderRadius:6, fontSize:11, fontWeight:600,
+          cursor:running ? 'not-allowed' : 'pointer', fontFamily:'IBM Plex Mono',
+          display:'flex', alignItems:'center', gap:5
+        }}>
+          {running ? <span style={{ display:'inline-block', animation:'spin 1s linear infinite' }}>↻</span> : '⚡'}
+          {running ? 'Checking…' : 'Check Results'}
+        </button>
+        {status && <span style={{ fontFamily:'IBM Plex Mono', fontSize:10,
+          color: status.startsWith('✓') ? C.gain : status.startsWith('✗') ? C.loss : C.warn }}>{status}</span>}
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  MAIN APP
+  // ══════════════════════════════════════════════════════════════════════════
+  function App() {
+    const [data,       setData]      = React.useState(null);
+    const [loading,    setLoading]   = React.useState(true);
+    const [dataError,  setDataError] = React.useState(false);
+    const [eqRange,    setEqRange]   = React.useState('all');
+    const [aTab,       setATab]      = React.useState('performance');
+    const [expandedW,  setExpW]      = React.useState(null);  // expanded wager card (today)
+    const [expandedR,  setExpR]      = React.useState(null);  // expanded ledger row
+    const [betFilter,  setBetFilter] = React.useState('All'); // All | ML | Total
+    const [ledgFilter, setLedgFilter]= React.useState('settled');
+    const [showPred,   setShowPred]  = React.useState(false);
+
+    function loadData() {
+      setLoading(true);
+      const loader = typeof window.DE_loadData === 'function' ? window.DE_loadData() : Promise.resolve(null);
+      loader.then(result => {
+        setData(result);
+        setDataError(!result);
+        setLoading(false);
+      });
+    }
+
+    React.useEffect(() => { loadData(); }, []);
+
+    if (loading) {
+      return (
+        <div style={{ minHeight:'100vh', background:C.bg, display:'flex', flexDirection:'column',
+          alignItems:'center', justifyContent:'center', gap:16 }}>
+          <DiamondLogo size={36}/>
+          <div style={{ fontFamily:'IBM Plex Mono', color:C.label, fontSize:12, letterSpacing:'0.1em' }}>
+            LOADING LIVE DATA…
+          </div>
+          <div style={{ width:200, height:2, background:C.surface, borderRadius:2, overflow:'hidden' }}>
+            <div style={{ height:'100%', background:C.accent, borderRadius:2,
+              animation:'shimmer 1.4s ease-in-out infinite', width:'60%' }}/>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Empty state ──────────────────────────────────────────────────────────
+    const EMPTY = {
+      equityCurve: [{ date: new Date().toISOString().slice(0,10), units:0 }, { date: new Date().toISOString().slice(0,10), units:0 }],
+      todayWagers: [], allWagers: [],
+      analytics: {
+        netUnits:0, roi:0, winRate:0, avgEdge:0, betsTracked:0, totalRisked:0,
+        clv:null, peakUnits:0, maxDrawdown:0,
+        streak:{ type:'W', count:0 },
+        record:{ w:0, l:0 },
+        markets:{ ml:{w:0,l:0,roi:0,net:0}, totals:{w:0,l:0,roi:0,net:0} },
+        grades:{ A:{w:0,l:0,roi:0,avg_edge:0}, B:{w:0,l:0,roi:0,avg_edge:0}, C:{w:0,l:0,roi:0,avg_edge:0} },
+        anyNoOdds: false,
+      },
+      bestBet:null, totalRows:0, lastUpdated:'—'
+    };
+
+    const d    = data || EMPTY;
+    const { equityCurve, analytics: a, bestBet, totalRows, lastUpdated } = d;
+    const allWagers   = d.allWagers || [];
+    const todayWagers = d.todayWagers || [];
+
+    // ── Filter: Today's picks ────────────────────────────────────────────────
+    const todayVisible = todayWagers.filter(w => {
+      if (!showPred && w.type === 'prediction') return false;
+      if (betFilter === 'ML'    && w.betType !== 'ML')    return false;
+      if (betFilter === 'Total' && w.betType !== 'Total') return false;
+      return true;
+    });
+
+    // ── Filter: History ledger ───────────────────────────────────────────────
+    const ledgerVisible = allWagers.filter(w => {
+      if (!showPred && w.type === 'prediction') return false;
+      if (betFilter === 'ML'    && w.betType !== 'ML')    return false;
+      if (betFilter === 'Total' && w.betType !== 'Total') return false;
+      if (ledgFilter === 'pending' && w.status !== 'Pending')  return false;
+      if (ledgFilter === 'settled' && (w.status === 'Pending' || w.type === 'prediction')) return false;
+      if (ledgFilter === 'wins'    && w.status !== 'Win')  return false;
+      if (ledgFilter === 'losses'  && w.status !== 'Loss') return false;
+      return true;
+    });
+
+    const net = a.netUnits;
+
+    return (
+      <div style={{ minHeight:'100vh', background:C.bg, color:C.text, fontFamily:"'Inter', sans-serif" }}>
+
+        {/* ── NAV ─────────────────────────────────────────────────────────── */}
+        <nav style={{
+          background:C.surface, borderBottom:`1px solid ${C.border}`,
+          padding:'0 24px', height:52,
+          display:'flex', alignItems:'center', justifyContent:'space-between',
+          position:'sticky', top:0, zIndex:100
+        }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <DiamondLogo size={20}/>
+            <span style={{ fontFamily:'IBM Plex Mono', fontWeight:700, fontSize:14, color:C.text, letterSpacing:'0.05em' }}>
+              DIAMOND<span style={{ color:C.accent }}>EDGE</span>
+            </span>
+            <span style={{ fontSize:9, color:C.muted, fontFamily:'IBM Plex Mono', marginLeft:4,
+              background:C.surface2, border:`1px solid ${C.border}`, borderRadius:3, padding:'1px 5px' }}>MLB QUANT</span>
+          </div>
+          <div className="nav-links" style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <a href="index.html" style={{
+              background:'none', border:`1px solid ${C.border}`, color:C.label,
+              fontSize:12, cursor:'pointer', padding:'4px 12px', borderRadius:6,
+              fontFamily:"'Inter', sans-serif", textDecoration:'none',
+              display:'inline-flex', alignItems:'center', gap:6
+            }}>← Model</a>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <AutoCheckBtn onRefresh={loadData}/>
+            <div style={{ width:7, height:7, borderRadius:'50%',
+              background:dataError ? C.warn : C.gain,
+              boxShadow:`0 0 6px ${dataError ? C.warn : C.gain}` }}/>
+            <span style={{ fontFamily:'IBM Plex Mono', fontSize:10, color:dataError ? C.warn : C.gain }}>
+              {dataError ? 'NO DATA' : 'LIVE'}
+            </span>
+            <span style={{ fontFamily:'IBM Plex Mono', fontSize:10, color:C.label, marginLeft:2 }}>
+              {lastUpdated}
+            </span>
+          </div>
+        </nav>
+
+        {/* ── HERO KPI STRIP ──────────────────────────────────────────────── */}
+        <section style={{
+          background:`linear-gradient(180deg, ${C.surface} 0%, ${C.bg} 100%)`,
+          borderBottom:`1px solid ${C.border}`,
+          padding:'24px 24px 20px'
+        }}>
+          <div style={{ maxWidth:1200, margin:'0 auto' }}>
+            {/* Primary KPIs */}
+            <div className="kpi-strip" style={{ display:'flex', gap:32, flexWrap:'wrap', alignItems:'flex-end', marginBottom:20 }}>
+              {/* Net Units — hero */}
+              <div>
+                <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.12em', marginBottom:6 }}>NET UNITS</div>
+                <div style={{ fontSize:44, fontWeight:800, color:net >= 0 ? C.gain : C.loss, fontFamily:'IBM Plex Mono', lineHeight:1 }}>
+                  {net >= 0 ? '+' : ''}{net.toFixed(1)}
+                </div>
+                {a.anyNoOdds && (
+                  <div style={{ fontSize:9, color:C.warn, fontFamily:'IBM Plex Mono', marginTop:4, opacity:.8 }}>
+                    ⚠ some bets using flat risk (no odds)
+                  </div>
+                )}
+              </div>
+              {/* Divider */}
+              <div style={{ width:1, height:56, background:C.border, alignSelf:'center' }}/>
+              {/* Secondary KPIs */}
+              {[
+                { label:'ROI',          value: (a.roi >= 0 ? '+' : '') + a.roi + '%',           color: a.roi >= 0 ? C.gain : C.loss },
+                { label:'CLV%',         value: '—',                                               color: C.label },
+                { label:'WIN RATE',     value: a.winRate + '%',                                   color: a.winRate >= 52.4 ? C.gain : C.text },
+                { label:'MAX DRAWDOWN', value: a.maxDrawdown + 'u',                               color: C.loss },
+                { label:'BETS TRACKED', value: '' + a.betsTracked,                                color: C.text },
+              ].map(k => (
+                <div key={k.label}>
+                  <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.1em', marginBottom:4 }}>{k.label}</div>
+                  <div style={{ fontSize:20, fontWeight:700, color:k.color, fontFamily:'IBM Plex Mono' }}>{k.value}</div>
+                </div>
+              ))}
+              {/* Divider */}
+              <div style={{ width:1, height:56, background:C.border, alignSelf:'center' }}/>
+              {/* Streak */}
+              <div>
+                <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.1em', marginBottom:6 }}>STREAK</div>
+                <div style={{ display:'flex', gap:3 }}>
+                  {a.streak.count === 0
+                    ? <span style={{ fontFamily:'IBM Plex Mono', fontSize:12, color:C.label }}>—</span>
+                    : Array.from({ length: Math.min(a.streak.count, 8) }).map((_, i) => (
+                        <span key={i} style={{
+                          fontFamily:'IBM Plex Mono', fontSize:11, fontWeight:700,
+                          color: a.streak.type === 'W' ? C.gain : C.loss,
+                          background: (a.streak.type === 'W' ? C.gain : C.loss) + '18',
+                          border:`1px solid ${(a.streak.type === 'W' ? C.gain : C.loss)}44`,
+                          borderRadius:3, padding:'1px 5px'
+                        }}>{a.streak.type}</span>
+                    ))
+                  }
+                </div>
+              </div>
+              {/* Sparkline */}
+              <div style={{ marginLeft:'auto' }}>
+                <div style={{ fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.1em', marginBottom:6 }}>EQUITY</div>
+                <Sparkline data={equityCurve} width={140} height={44}/>
+              </div>
+            </div>
+            {/* Record sub-row */}
+            <div style={{ display:'flex', gap:20, alignItems:'center' }}>
+              <span style={{ fontFamily:'IBM Plex Mono', fontSize:12, color:C.label }}>
+                RECORD <span style={{ color:C.text, fontWeight:700 }}>{a.record.w}-{a.record.l}</span>
+              </span>
+              <span style={{ fontFamily:'IBM Plex Mono', fontSize:11, color:C.label }}>
+                ML <span style={{ color:C.text }}>{a.markets.ml.w}-{a.markets.ml.l}</span>
+              </span>
+              <span style={{ fontFamily:'IBM Plex Mono', fontSize:11, color:C.label }}>
+                TOT <span style={{ color:C.text }}>{a.markets.totals.w}-{a.markets.totals.l}</span>
+              </span>
+              <span style={{ fontFamily:'IBM Plex Mono', fontSize:11, color:C.label }}>
+                AVG EDGE <span style={{ color:C.gain }}>+{a.avgEdge}%</span>
+              </span>
+              {bestBet && (
+                <span style={{ marginLeft:'auto', fontFamily:'IBM Plex Mono', fontSize:10,
+                  color:C.accent, background:C.accent+'12', border:`1px solid ${C.accent}30`,
+                  borderRadius:6, padding:'3px 10px' }}>
+                  TODAY'S BEST: {bestBet.away} @ {bestBet.home} · {bestBet.label} · +{bestBet.edge}%
+                </span>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ── MAIN ─────────────────────────────────────────────────────────── */}
+        <main style={{ maxWidth:1200, margin:'0 auto', padding:'28px 24px' }}>
+
+          {/* ── BET TYPE FILTER (global) ───────────────────────────────────── */}
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:28, flexWrap:'wrap' }}>
+            <span style={{ fontFamily:'IBM Plex Mono', fontSize:10, color:C.label, letterSpacing:'0.1em' }}>FILTER</span>
+            <SegControl options={['All','ML','Total']} value={betFilter} onChange={setBetFilter} small/>
+            <label style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', marginLeft:8 }}>
+              <Toggle value={showPred} onChange={setShowPred}/>
+              <span style={{ fontSize:11, color:C.label, fontFamily:'IBM Plex Mono' }}>Show Predictions</span>
+            </label>
+          </div>
+
+          {/* ── TODAY'S PICKS ──────────────────────────────────────────────── */}
+          <SectionHeader title="Today's Picks" count={todayVisible.length}/>
+          <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:40 }}>
+            {todayVisible.length === 0 ? (
+              <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12,
+                padding:'32px 20px', textAlign:'center', color:C.label, fontFamily:'IBM Plex Mono', fontSize:12 }}>
+                No picks for today{betFilter !== 'All' ? ` (${betFilter} filter active)` : ''}
+              </div>
+            ) : todayVisible.map(w => (
+              <WagerCard
+                key={w.id}
+                wager={w}
+                expanded={expandedW === w.id}
+                onToggle={() => setExpW(expandedW === w.id ? null : w.id)}
+              />
+            ))}
+          </div>
+
+          {/* ── EQUITY CURVE ───────────────────────────────────────────────── */}
+          <SectionHeader title="Equity Curve" extra={
+            <SegControl small options={['7d','30d','90d','All']}
+              value={{ '7d':'7d','30d':'30d','90d':'90d','all':'All' }[eqRange]}
+              onChange={v => setEqRange(v === 'All' ? 'all' : v)}/>
+          }/>
+          <div style={{ background:C.surface, border:`1px solid ${C.border}`,
+            borderRadius:12, padding:'20px 24px', marginBottom:40 }}>
+            <EquityChart data={equityCurve} range={eqRange}/>
+            <div style={{ display:'flex', gap:20, marginTop:12, flexWrap:'wrap' }}>
+              <span style={{ fontFamily:'IBM Plex Mono', fontSize:10, color:C.label }}>
+                PEAK <span style={{ color:C.gain }}>{a.peakUnits >= 0 ? '+' : ''}{a.peakUnits}u</span>
+              </span>
+              <span style={{ fontFamily:'IBM Plex Mono', fontSize:10, color:C.label }}>
+                MAX DD <span style={{ color:C.loss }}>{a.maxDrawdown}u</span>
+              </span>
+              <span style={{ fontFamily:'IBM Plex Mono', fontSize:10, color:C.label }}>
+                BETS <span style={{ color:C.text }}>{a.betsTracked}</span>
+              </span>
+              <span style={{ fontFamily:'IBM Plex Mono', fontSize:10, color:C.label }}>
+                SETTLED from wagers only · no predictions included
+              </span>
+            </div>
+          </div>
+
+          {/* ── ANALYTICS ──────────────────────────────────────────────────── */}
+          <SectionHeader title="Analytics"/>
+          <div style={{ background:C.surface, border:`1px solid ${C.border}`,
+            borderRadius:12, marginBottom:40, overflow:'hidden' }}>
+            <div style={{ display:'flex', borderBottom:`1px solid ${C.border}`, overflowX:'auto' }}>
+              {[
+                { id:'performance', label:'Performance' },
+                { id:'markets',     label:'Markets'     },
+                { id:'grades',      label:'Model Edge'  },
+              ].map(t => (
+                <button key={t.id} onClick={() => setATab(t.id)} style={{
+                  background:'none', border:'none', padding:'13px 20px',
+                  fontFamily:"'Inter', sans-serif", fontSize:13, cursor:'pointer',
+                  color: aTab === t.id ? C.text : C.label,
+                  borderBottom:`2px solid ${aTab === t.id ? C.accent : 'transparent'}`,
+                  whiteSpace:'nowrap'
+                }}>{t.label}</button>
+              ))}
+            </div>
+            <div style={{ padding:20 }}>
+              {aTab === 'performance' && <AnalyticsPerformance a={a}/>}
+              {aTab === 'markets'     && <AnalyticsMarkets a={a}/>}
+              {aTab === 'grades'      && <AnalyticsGrades a={a}/>}
+            </div>
+          </div>
+
+          {/* ── HISTORY LEDGER ─────────────────────────────────────────────── */}
+          <SectionHeader title="History Ledger" count={ledgerVisible.length} extra={
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              {[
+                { key:'all',     label:'All'     },
+                { key:'pending', label:'Pending' },
+                { key:'settled', label:'Settled' },
+                { key:'wins',    label:'W'       },
+                { key:'losses',  label:'L'       },
+              ].map(f => (
+                <button key={f.key} onClick={() => setLedgFilter(f.key)} style={{
+                  background: ledgFilter === f.key ? C.accent + '22' : 'transparent',
+                  border:`1px solid ${ledgFilter === f.key ? C.accent : C.border}`,
+                  color:      ledgFilter === f.key ? C.accent : C.label,
+                  padding:'4px 11px', borderRadius:5, fontSize:11, cursor:'pointer',
+                  fontFamily:'IBM Plex Mono'
+                }}>{f.label}</button>
+              ))}
+            </div>
+          }/>
+
+          <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', marginBottom:40 }}>
+            {/* Table header */}
+            <div className="ledger-grid" style={{
+              display:'grid', gridTemplateColumns:'76px 16px 1fr 100px 60px 70px 80px 80px 40px',
+              padding:'10px 16px', borderBottom:`1px solid ${C.border}`,
+              fontSize:9, color:C.label, fontFamily:'IBM Plex Mono', letterSpacing:'0.1em'
+            }}>
+              {['DATE','','GAME','BET','EDGE','RISK','RESULT','P/L',''].map((h, i) => <div key={i}>{h}</div>)}
+            </div>
+
+            {ledgerVisible.length === 0 ? (
+              <div style={{ padding:'40px 20px', textAlign:'center', color:C.label, fontFamily:'IBM Plex Mono', fontSize:12 }}>
+                No records match this filter
+              </div>
+            ) : ledgerVisible.map((w, i) => (
+              <React.Fragment key={w.id}>
+                <div
+                  onClick={() => setExpR(expandedR === w.id ? null : w.id)}
+                  className="ledger-grid"
+                  style={{
+                    display:'grid', gridTemplateColumns:'76px 16px 1fr 100px 60px 70px 80px 80px 40px',
+                    padding:'11px 16px',
+                    borderBottom: i < ledgerVisible.length - 1 ? `1px solid ${C.border}` : 'none',
+                    fontSize:12, cursor:'pointer',
+                    background: expandedR === w.id ? C.surface2 : 'transparent',
+                    alignItems:'center',
+                    opacity: w.type === 'prediction' ? 0.6 : 1
+                  }}
+                >
+                  <div style={{ fontFamily:'IBM Plex Mono', fontSize:10, color:C.label }}>
+                    {window.fmt.date(w.date)}
+                  </div>
+                  <div><BetTypeBadge type={w.betType}/></div>
+                  <div style={{ color:C.text, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {w.game}
+                  </div>
+                  <div style={{ fontFamily:'IBM Plex Mono', fontSize:11, color:C.text,
+                    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{w.label}</div>
+                  <div className="ledger-col-hide" style={{ fontFamily:'IBM Plex Mono', fontSize:11, color: w.edge > 0 ? C.gain : C.label }}>
+                    {w.betType === 'ML' && w.edge > 0 ? '+' + w.edge + '%' : '—'}
+                  </div>
+                  <div className="ledger-col-hide" style={{ fontFamily:'IBM Plex Mono', fontSize:11, color:C.label }}>
+                    {w.risk > 0 ? (w.noOdds ? '1.00u*' : w.risk.toFixed(2) + 'u') : '—'}
+                  </div>
+                  <div><StatusPill status={w.status}/></div>
+                  <div style={{
+                    fontFamily:'IBM Plex Mono', fontSize:12, fontWeight:700,
+                    color: w.pl === null ? C.label : w.pl > 0 ? C.gain : w.pl < 0 ? C.loss : C.warn
+                  }}>{window.fmt.pl(w.pl)}</div>
+                  <div style={{ color:C.label, fontSize:11, textAlign:'center' }}>
+                    {expandedR === w.id ? '▲' : '▼'}
+                  </div>
+                </div>
+
+                {expandedR === w.id && (
+                  <>
+                    <div style={{
+                      padding:'12px 16px', borderBottom:`1px solid ${C.border}`,
+                      background:C.surface2, display:'flex', gap:20, flexWrap:'wrap', alignItems:'center'
+                    }}>
+                      {w.odds   && <StatMini label="ODDS"         value={window.fmt.odds(w.odds)}/>}
+                      {w.edge > 0 && <StatMini label="EDGE"       value={'+' + w.edge + '%'} color={C.gain}/>}
+                      {w.grade  && <StatMini label="GRADE"        value={<GradeBadge grade={w.grade}/>}/>}
+                      {w.totalLine    && <StatMini label="TOTAL LINE"   value={w.totalLine}/>}
+                      {w.actualWinner && <StatMini label="WINNER"       value={w.actualWinner} color={C.text}/>}
+                      {w.actualTotal  && <StatMini label="ACTUAL TOTAL" value={w.actualTotal}/>}
+                      {w.projected    && <StatMini label="PROJ TOTAL"   value={w.projected}/>}
+                      {w.noOdds && <span style={{ fontFamily:'IBM Plex Mono', fontSize:10, color:C.warn, opacity:.8 }}>* flat risk (no odds)</span>}
+                      {w.type === 'prediction' && (
+                        <div style={{ fontFamily:'IBM Plex Mono', fontSize:11, color:C.label, fontStyle:'italic' }}>
+                          Prediction — not counted in bankroll
+                        </div>
+                      )}
+                    </div>
+                    {/* Manual result entry */}
+                    {w.type === 'official' && w.status === 'Pending' && (
+                      <ResultEntryRow
+                        rowId={w.rowId}
+                        wager={w}
+                        allWagers={allWagers}
+                        onSaved={loadData}
+                      />
+                    )}
+                  </>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+
+        </main>
+
+        {/* ── FOOTER ────────────────────────────────────────────────────────── */}
+        <footer style={{
+          borderTop:`1px solid ${C.border}`, padding:'16px 24px',
+          display:'flex', justifyContent:'space-between', alignItems:'center',
+          fontSize:10, color:C.label, fontFamily:'IBM Plex Mono', flexWrap:'wrap', gap:8
+        }}>
+          <span>DIAMOND EDGE · MLB QUANT DESK · <a href="tracker.html" style={{ color:C.label, textDecoration:'none' }}>← Classic Tracker</a></span>
+          <span style={{ color:C.muted }}>All P/L calculated to-win-1u · Predictions excluded from bankroll · No data stored locally</span>
+        </footer>
+      </div>
+    );
+  }
+
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<App/>);
+
+  </script>
+</body>
+</html>
